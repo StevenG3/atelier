@@ -18,7 +18,7 @@ teardown() {
 
 @test "next prints no-pending message when nothing to do" {
   setup_mock_gh  # default mock: all queues empty
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh next
+  run bash "$ATELIER_SH" next
   [ "$status" -eq 0 ]
   [[ "$output" == *"无待处理项"* ]]
 }
@@ -27,7 +27,7 @@ teardown() {
 
 @test "next picks needs-response over claude:review" {
   setup_mock_gh_with_pending
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh next
+  run bash "$ATELIER_SH" next
   [ "$status" -eq 0 ]
   # Should mention Issue #5 (needs-response) not PR #12 (claude:review)
   [[ "$output" == *"needs-response"* || "$output" == *"respond"* ]]
@@ -61,7 +61,7 @@ esac
 SH
   chmod +x "$MOCK_GH_TMPDIR/gh"
 
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh next
+  run bash "$ATELIER_SH" next
   [ "$status" -eq 0 ]
   [[ "$output" == *"12"* || "$output" == *"review"* ]]
 }
@@ -94,7 +94,7 @@ esac
 SH
   chmod +x "$MOCK_GH_TMPDIR/gh"
 
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh next
+  run bash "$ATELIER_SH" next
   [ "$status" -eq 0 ]
   [[ "$output" == *"8"* || "$output" == *"design"* ]]
 }
@@ -103,7 +103,7 @@ SH
 
 @test "status command completes successfully with no pending items" {
   setup_mock_gh
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh status
+  run bash "$ATELIER_SH" status
   [ "$status" -eq 0 ]
   [[ "$output" == *"atelier"* ]]
 }
@@ -130,7 +130,7 @@ esac
 SH
   chmod +x "$MOCK_GH_TMPDIR/gh"
 
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh go 5
+  run bash "$ATELIER_SH" go 5
   [ "$status" -eq 0 ]
   [[ "$output" == *"codex:go"* ]]
 }
@@ -138,7 +138,7 @@ SH
 @test "help command skips preflight and shows usage" {
   # help should NOT require gh to be available
   setup_mock_no_gh
-  run bash /home/gggqqy/archives/atelier/scripts/atelier.sh help
+  run bash "$ATELIER_SH" help
   [ "$status" -eq 0 ]
   [[ "$output" == *"status"* ]]
   [[ "$output" == *"next"* ]]
