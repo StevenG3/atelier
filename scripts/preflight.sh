@@ -6,6 +6,9 @@
 #   source "$(dirname "$0")/preflight.sh"
 #   run_preflight   # 失败则 exit 1
 
+# gh 命令路径（测试时可通过 GH_CMD 覆盖指向 mock）
+GH_CMD="${GH_CMD:-gh}"
+
 # ── 颜色（在被 source 时继承父脚本的颜色变量，或重新定义）──────────────
 _PF_RED='\033[0;31m'; _PF_GREEN='\033[0;32m'
 _PF_YELLOW='\033[0;33m'; _PF_BOLD='\033[1m'; _PF_RESET='\033[0m'
@@ -39,9 +42,9 @@ run_preflight() {
   echo -e "${_PF_BOLD}── preflight 依赖检查 ──────────────────────────────${_PF_RESET}"
 
   # ── 1. gh CLI 已安装 ───────────────────────────────────────────────────
-  if command -v gh &>/dev/null; then
+  if command -v "$GH_CMD" &>/dev/null; then
     local _gh_ver
-    _gh_ver=$(gh --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    _gh_ver=$("$GH_CMD" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     _pf_ok "gh CLI 已安装 (${_gh_ver:-unknown})"
   else
     _pf_fail "gh CLI 未安装"
@@ -50,9 +53,9 @@ run_preflight() {
   fi
 
   # ── 2. GitHub 已认证 ───────────────────────────────────────────────────
-  if command -v gh &>/dev/null; then
+  if command -v "$GH_CMD" &>/dev/null; then
     local _auth_out _auth_user
-    _auth_out=$(gh auth status 2>&1 || true)
+    _auth_out=$("$GH_CMD" auth status 2>&1 || true)
     # 支持两种格式：
     #   "Logged in to github.com as USERNAME"
     #   "Logged in to github.com account USERNAME"
@@ -68,8 +71,8 @@ run_preflight() {
   fi
 
   # ── 3. 目标仓库可访问 ──────────────────────────────────────────────────
-  if command -v gh &>/dev/null && gh auth status &>/dev/null; then
-    if gh repo view "$_repo" --json name -q '.name' &>/dev/null; then
+  if command -v "$GH_CMD" &>/dev/null && "$GH_CMD" auth status &>/dev/null; then
+    if "$GH_CMD" repo view "$_repo" --json name -q '.name' &>/dev/null; then
       _pf_ok "仓库可访问 ($_repo)"
     else
       _pf_fail "仓库不可访问：$_repo"
@@ -80,10 +83,10 @@ run_preflight() {
   fi
 
   # ── 4. 必需标签全部存在 ────────────────────────────────────────────────
-  if command -v gh &>/dev/null && gh auth status &>/dev/null && \
-     gh repo view "$_repo" --json name -q '.name' &>/dev/null; then
+  if command -v "$GH_CMD" &>/dev/null && "$GH_CMD" auth status &>/dev/null && \
+     "$GH_CMD" repo view "$_repo" --json name -q '.name' &>/dev/null; then
     local _existing_labels
-    _existing_labels=$(gh api "repos/$_repo/labels?per_page=100" --jq '.[].name' 2>/dev/null || true)
+    _existing_labels=$("$GH_CMD" api "repos/$_repo/labels?per_page=100" --jq '.[].name' 2>/dev/null || true)
     local _missing=()
     for label in "${REQUIRED_LABELS[@]}"; do
       if ! echo "$_existing_labels" | grep -qxF "$label" 2>/dev/null; then
