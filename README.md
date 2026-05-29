@@ -13,6 +13,14 @@
 
 ## 📱 看板（手机直接打开）
 
+> **首次使用需一次性配置**（约 1 分钟，之后永久有效）：
+> 1. 进入仓库 **Settings → Pages**
+> 2. Source 选 **Deploy from a branch**
+> 3. Branch 选 `main`，目录选 `/docs`
+> 4. 点 **Save**，等待约 1 分钟后 GitHub 完成构建
+
+配置完成后，看板地址：
+
 **https://steveng3.github.io/atelier/dashboard/**
 
 60 秒自动刷新，无需登录，显示所有活跃 Issue / PR 状态、Claude-Codex 最近交互、以及高亮"待你合并"的 PR。
