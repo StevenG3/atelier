@@ -1,0 +1,91 @@
+你是 StevenG3/atelier 仓库的架构师（CLAUDE.md 定义了你的角色）。
+
+任务：为 Hermes × TradingAgents × Aegis 交易系统生成 Phase {{NEXT_PHASE}} 的完整实现规格，
+      保存到本地备份，并发布为 Atelier GitHub Issue 供 Codex 实现。
+
+变量说明：
+  {{CURRENT_PHASE}} = 刚完成的 Phase 编号（如 23）
+  {{NEXT_PHASE}}    = 即将生成的 Phase 编号（如 24）
+  {{REPO}}          = StevenG3/atelier
+
+---
+
+步骤：
+
+1. 读取当前 Phase 的完整 Prompt，重点关注末尾「DESIGN NOTES FOR FUTURE PHASES」：
+   cat /home/gggqqy/docs/CODEX_PHASE{{CURRENT_PHASE}}_PROMPT.md
+
+2. 读取 aegis 仓库的最近提交，了解实际完成情况：
+   git -C /home/gggqqy/apps/aegis log --oneline -20
+
+3. 读取 hermes-agent 最近提交（如 Phase 涉及 hermes-agent）：
+   git -C /home/gggqqy/apps/hermes-agent log --oneline -10
+
+4. 基于「DESIGN NOTES FOR FUTURE PHASES」中关于 Phase {{NEXT_PHASE}} 的描述，
+   结合实际代码状态，生成完整的 Phase {{NEXT_PHASE}} 规格文档。
+
+   格式严格遵循现有 Phase Prompt 文件结构（参考任意已有文件）：
+   ─────────────────────────────────────────────────────────────
+   # Codex Phase {{NEXT_PHASE}} Prompt — [标题]
+
+   > Hand this entire file to Codex verbatim. Do not edit out sections.
+   > Repo touched: [明确说明哪个 repo，通常是 /home/gggqqy/apps/aegis]
+
+   ## ROLE
+   （Codex 是执行工程师，Claude 是架构师，不要超出范围）
+
+   ## CONTEXT
+   ### End goal (recap)
+   （一句话描述系统最终目标）
+   ### What Phase {{CURRENT_PHASE}} delivered
+   （简述已完成的功能）
+   ### Where Phase {{NEXT_PHASE}} takes the system
+   （详细描述本 Phase 的目标和设计理由）
+
+   ## GOAL (Phase {{NEXT_PHASE}} ONLY)
+   （列出 3-6 条具体改动，每条对应一个 §N 节）
+   Out of scope this phase: [明确列出不做的事]
+
+   ## SAFETY INVARIANTS
+   （列出所有必须保持的安全不变量，每条要可测试）
+
+   ## §1 — [第一个改动标题]
+   ### 1-A [子任务]
+   （具体代码片段、函数签名、SQL、测试用例）
+
+   ## §2 — [第二个改动]
+   ...
+
+   ## ALLOWED FILES
+   （列出 Codex 允许修改的文件）
+
+   ## FORBIDDEN SCOPE
+   （明确禁止修改的内容）
+
+   ## ACCEPTANCE CRITERIA
+   （逐条可验证的完成标准，编号列出）
+
+   ## STOP-AND-ASK CONDITIONS
+   （遇到哪些情况必须停下来问 Claude）
+
+   ## DESIGN NOTES FOR FUTURE PHASES
+   （Phase {{NEXT_PHASE}}+1 及之后的设计笔记，为下一轮循环提供输入）
+   ─────────────────────────────────────────────────────────────
+
+5. 将规格保存到本地（作为永久备份）：
+   tee /home/gggqqy/docs/CODEX_PHASE{{NEXT_PHASE}}_PROMPT.md << 'SPEC_END'
+   [步骤 4 生成的完整规格内容]
+   SPEC_END
+
+6. 在 Atelier 创建 GitHub Issue（Issue body = 完整规格）：
+   gh issue create \
+     --repo {{REPO}} \
+     --title "[hermes-aegis] Phase {{NEXT_PHASE}} — [一行描述，如: Streaming IBKR account updates]" \
+     --body "$(printf 'project: hermes-aegis\nphase: {{NEXT_PHASE}}\n\n---\n\n'; cat /home/gggqqy/docs/CODEX_PHASE{{NEXT_PHASE}}_PROMPT.md)" \
+     --label "codex:implement"
+
+7. 确认 Issue 创建成功并打印编号：
+   gh issue list --repo {{REPO}} --label "codex:implement" --limit 3
+
+8. 回复我 Issue 编号，等我确认规格后再加 codex:go 标签。
+   （不要自动加 codex:go，规格需要人类确认后才能启动 Codex）

@@ -69,6 +69,18 @@ Or: GitHub mobile → Actions → "手动触发 Claude" → Run workflow (backup
 Copy `projects/example.yml` → `projects/<your-project>.yml` and fill in the repo list and test commands.  
 When creating a new Issue, put `project: <your-project>` on the first line of the body.
 
+### Active project: Hermes × TradingAgents × Aegis
+
+Config: [`projects/hermes-aegis.yml`](projects/hermes-aegis.yml)  
+Repos: `StevenG3/aegis` (core backend) · `StevenG3/hermes-agent` (NL interface) · `StevenG3/tradingagents-official` (market analysis)  
+Current phase: 23 (IBKR portfolio reconciliation)
+
+**To generate the next Phase spec**, say in a Claude Code session:
+```
+atelier design hermes-aegis Phase 24
+```
+Claude reads Phase 23's Design Notes, writes a complete Phase 24 spec, saves it to `/home/gggqqy/docs/CODEX_PHASE24_PROMPT.md`, and opens an Atelier Issue. You review the spec, then run `./scripts/atelier.sh go <N>` to start Codex.
+
 ## First-time setup checklist
 
 1. Install `gh` CLI and run `gh auth login`

@@ -69,6 +69,18 @@
 复制 `projects/example.yml` → `projects/<your-project>.yml`，填写 repo 列表和测试命令。  
 新建 Issue 时在 body 第一行写 `project: <your-project>`。
 
+### 已接入工程：Hermes × TradingAgents × Aegis
+
+配置文件：[`projects/hermes-aegis.yml`](projects/hermes-aegis.yml)  
+涉及 Repo：`StevenG3/aegis`（核心后端）· `StevenG3/hermes-agent`（NL 接口）· `StevenG3/tradingagents-official`（市场分析）  
+当前 Phase：23（IBKR 持仓对账）
+
+**生成下一个 Phase 规格**，在 Claude Code 会话里说：
+```
+atelier design hermes-aegis Phase 24
+```
+Claude 读取 Phase 23 的 Design Notes，生成完整 Phase 24 规格，保存到 `/home/gggqqy/docs/CODEX_PHASE24_PROMPT.md`，并创建 Atelier Issue。你确认规格后运行 `./scripts/atelier.sh go <N>` 启动 Codex。
+
 ## 文档索引
 
 | 文件 | 内容 |

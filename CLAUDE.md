@@ -70,6 +70,8 @@ Claude Pro 额度稀缺，且 Claude.ai 聊天 / Claude Code / Cowork 共用同�
 | `atelier review <N>` | 读 PR #N 的 diff，按评审清单给出 Approve 或 Request changes |
 | `atelier design <N>` | 读 Issue #N，写完整功能规格，打 `claude:spec-ready` 标签 |
 | `atelier status` | 运行 `scripts/atelier.sh status`，报告当前所有待处理项 |
+| `atelier design hermes-aegis Phase <N>` | 读取 Phase N-1 Prompt 的 Design Notes → 生成 Phase N 完整规格 → 保存到 `/home/gggqqy/docs/CODEX_PHASE<N>_PROMPT.md` → 创建 Atelier Issue（label: codex:implement）。规格发布后等人类确认才加 codex:go。 |
+| `atelier next-phase hermes-aegis` | 读 `projects/hermes-aegis.yml` 的 current_phase，自动判断下一个 Phase 编号，执行与上一条相同的流程。流程结束后将 current_phase 更新为新编号。 |
 
 操作时使用 `gh` CLI 把结果写回 GitHub（comment / label / review），不只是回复用户。
 

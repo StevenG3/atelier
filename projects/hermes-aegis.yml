@@ -1,0 +1,45 @@
+# projects/hermes-aegis.yml
+#
+# Hermes × TradingAgents × Aegis 综合交易系统
+#
+# 目标：以自然语言作为输入输出，集市场分析、买点提示、自动下单、
+#       美港股 / 币圈自动交易等功能于一体的大型综合工具。
+#
+# 架构：
+#   用户 NL → 官方 Hermes → aegis-gateway skill
+#           → Aegis（risk-engine / orchestrator / execution）
+#           → TradingAgents（market analysis / signals）
+#           → 交易所 / IBKR（执行）
+
+name: "Hermes × TradingAgents × Aegis"
+github_org_or_user: "StevenG3"
+
+repos:
+  - id: aegis
+    github: "StevenG3/aegis"
+    local_path: "/home/gggqqy/apps/aegis"
+    role: "核心交易后端 — risk-engine / orchestrator / execution-service / ibkr-bridge / market-data / analysis-adapter"
+
+  - id: hermes-agent
+    github: "StevenG3/hermes-agent"
+    local_path: "/home/gggqqy/apps/hermes-agent"
+    role: "官方 Hermes NL 接口 + aegis-gateway skill（用户自然语言↔交易系统的 NL 桥梁）"
+
+  - id: tradingagents
+    github: "StevenG3/tradingagents-official"
+    local_path: "/home/gggqqy/apps/tradingagents-official"
+    role: "官方 TradingAgents — 市场分析 / 买卖信号 / 研究报告生成"
+
+# Phase N Prompt 文件存放目录（已有 Phase 1–23）
+# Claude 生成的规格保存至此，同时作为 Atelier Issue body
+phases_prompt_dir: "/home/gggqqy/docs"
+phases_prompt_pattern: "CODEX_PHASE{n}_PROMPT.md"
+current_phase: 23
+
+# 在 GitHub Project 看板「工程」字段的值，用于筛选
+project_tag: "hermes-aegis"
+
+# 验证命令（aegis 主仓，在 /home/gggqqy/apps/aegis 下运行）
+build_command: "docker compose -f deploy/docker-compose.yml build"
+test_command: "make test"
+lint_command: "make verify"
