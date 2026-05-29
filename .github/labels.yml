@@ -1,0 +1,32 @@
+# 标签定义。可用 github-label-sync 等工具同步：
+#   npx github-label-sync --access-token <TOKEN> --labels .github/labels.yml StevenG3/atelier
+# 或在 Issues → Labels 里手动照此创建。
+
+- name: "claude:design"
+  color: "8B5CF6"
+  description: "需要 Claude 出规格 / 拆解"
+
+- name: "codex:implement"
+  color: "10B981"
+  description: "规格就绪，交给 Codex 实现"
+
+- name: "codex:go"
+  color: "22C55E"
+  description: "起停开关：有此标签 Codex 才动手"
+
+- name: "claude:review"
+  color: "6366F1"
+  description: "需要 Claude 评审"
+
+- name: "needs-human"
+  color: "EF4444"
+  description: "卡住，需要人类介入决策"
+
+- name: "on-hold"
+  color: "9CA3AF"
+  description: "暂停，任何 Agent 都不动"
+
+- name: "blocked"
+  color: "F59E0B"
+  description: "被其他事项阻塞"
+

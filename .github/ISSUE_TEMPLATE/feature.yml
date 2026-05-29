@@ -1,0 +1,28 @@
+name: "实现任务 (Codex)"
+description: "规格已就绪，可直接交给 Codex 实现"
+labels: ["codex:implement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 要实现什么
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 每一条都应可被测试验证
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围边界
+      description: 哪些不在本任务范围内
+  - type: input
+    id: files
+    attributes:
+      label: 相关文件 / 入口
+      description: 提示 Codex 从哪里下手
+

@@ -1,0 +1,29 @@
+name: "设计 / 规格 (Claude)"
+description: "需要 Claude 先做架构设计或拆解的任务"
+labels: ["claude:design"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 我们想达成什么？为什么？
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 约束 / 背景
+      description: 技术约束、相关现有代码、不能碰的东西
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 怎样算"完成"？尽量可验证。
+    validations:
+      required: true
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: 待定问题
+      description: 需要 Claude 在规格里回答的开放问题
+

@@ -1,0 +1,35 @@
+# Claude 评审 workflow（骨架，需你填凭据后启用）
+#
+# 触发：PR 打开/更新，或评论里 @claude 时，让 Claude 评审。
+#
+# ⚠️ 预算注意：在 Action 里跑 Claude 通常走 Anthropic API key（按 token 计费），
+#    与你的 $20 Pro 订阅是分开计费的。如果想守住 $20 预算，建议先别开自动评审，
+#    而是你手动在 Claude Code 会话里挑重要 PR 评审。确认当前订阅/API 行为见：
+#    https://docs.claude.com/en/docs/claude-code/overview
+#
+# 启用步骤：
+#  1) 在仓库 Settings → Secrets 添加 ANTHROPIC_API_KEY
+#  2) 取消下面的注释，并按官方 action 文档核对版本：
+#     https://github.com/anthropics/claude-code-action
+
+name: claude-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request' || contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # - name: Claude review
+      #   uses: anthropics/claude-code-action@v1   # 用前请核对最新版本
+      #   with:
+      #     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      #     # 让 Claude 按 CLAUDE.md 的评审清单评审本 PR 的 diff
+      - name: placeholder
+        run: echo "在此接入 Claude 评审。详见文件顶部注释。"
+

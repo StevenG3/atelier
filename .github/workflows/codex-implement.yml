@@ -1,0 +1,33 @@
+# Codex 实现 workflow（骨架，需配置后启用）
+#
+# 触发：Issue 被打上 codex:implement + codex:go 标签时，让 Codex 实现并开 PR。
+#
+# 说明：Codex 的 GitHub 集成主要通过「OpenAI Codex GitHub App / Codex cloud 任务」完成，
+#       而不是一个简单的 marketplace action。两种常见接法：
+#         A) 安装 Codex 的 GitHub App，在 Codex 端配置「按标签/@mention 触发」，
+#            此 workflow 仅用于把状态同步回看板。
+#         B) 在 Action 里用 OpenAI API + Codex CLI 自建触发（需 OPENAI_API_KEY）。
+#       具体能力以 OpenAI Codex 当前文档为准：https://developers.openai.com/codex
+#
+# ⚠️ Codex $100 档的 10x 促销在 2026-05-31 结束，之后为 5x，排期心里有数。
+
+name: codex-implement
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  dispatch:
+    if: github.event.label.name == 'codex:go'
+    runs-on: ubuntu-latest
+    steps:
+      - name: placeholder
+        run: |
+          echo "Issue #${{ github.event.issue.number }} 已标记 codex:go。"
+          echo "在此触发 Codex 实现（见文件顶部两种接法）。"
+      # - name: 触发 Codex（示例：调用 Codex CLI / OpenAI API）
+      #   env:
+      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      #   run: |
+      #     # codex exec --issue ${{ github.event.issue.number }} ...
+
