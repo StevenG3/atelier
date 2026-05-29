@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>atelier 看板</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0d1117; color: #e6edf3; min-height: 100vh; }
+  header { background: #161b22; border-bottom: 1px solid #30363d;
+           padding: 12px 16px; display: flex; align-items: center;
+           justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .logo { font-weight: 700; font-size: 18px; color: #f0f6fc; }
+  .refresh-info { font-size: 12px; color: #8b949e; }
+  .refresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                 background: #3fb950; margin-right: 4px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  /* Summary bar */
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+          padding: 12px 8px; text-align: center; }
+  .stat-num { font-size: 24px; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 11px; color: #8b949e; margin-top: 4px; }
+  .stat-num.red { color: #f85149; }
+  .stat-num.yellow { color: #d29922; }
+  .stat-num.green { color: #3fb950; }
+  /* Sections */
+  section { margin-bottom: 20px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e;
+                   text-transform: uppercase; letter-spacing: .05em;
+                   margin-bottom: 8px; padding: 0 2px; }
+  /* Cards */
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+          padding: 12px; margin-bottom: 8px; transition: border-color .2s; }
+  .card:hover { border-color: #58a6ff; }
+  .card a { text-decoration: none; color: inherit; display: block; }
+  .card-header { display: flex; align-items: flex-start; justify-content: space-between;
+                 gap: 8px; }
+  .card-title { font-size: 14px; font-weight: 500; color: #f0f6fc; line-height: 1.4;
+                flex: 1; }
+  .card-num { font-size: 12px; color: #8b949e; white-space: nowrap; }
+  .card-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px;
+               flex-wrap: wrap; }
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+           font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+  .badge-red    { background: rgba(248,81,73,.15);  color: #f85149; border: 1px solid rgba(248,81,73,.3); }
+  .badge-yellow { background: rgba(210,153,34,.15); color: #d29922; border: 1px solid rgba(210,153,34,.3); }
+  .badge-green  { background: rgba(63,185,80,.15);  color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
+  .badge-blue   { background: rgba(88,166,255,.15); color: #58a6ff; border: 1px solid rgba(88,166,255,.3); }
+  .badge-purple { background: rgba(139,148,158,.15);color: #a5d6ff; border: 1px solid rgba(139,148,158,.3); }
+  .badge-gray   { background: rgba(139,148,158,.15);color: #8b949e; border: 1px solid rgba(139,148,158,.3); }
+  /* Action card */
+  .action-card { background: #1c2128; border: 1px solid #f85149;
+                 border-radius: 8px; padding: 14px; margin-bottom: 8px; }
+  .action-card a { text-decoration: none; color: inherit; }
+  .action-title { font-size: 14px; font-weight: 500; color: #f0f6fc; }
+  .action-cta { display: inline-block; margin-top: 10px; padding: 6px 14px;
+                background: #238636; color: #fff; border-radius: 6px; font-size: 13px;
+                font-weight: 600; text-decoration: none !important; }
+  /* Comment feed */
+  .comment { border-left: 2px solid #30363d; padding: 6px 0 6px 12px;
+             margin-bottom: 10px; }
+  .comment-meta { font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+  .comment-body { font-size: 13px; color: #c9d1d9; line-height: 1.5;
+                  white-space: pre-wrap; word-break: break-word;
+                  max-height: 80px; overflow: hidden; }
+  .comment-body.decision { border-left: 2px solid #3fb950; padding-left: 8px; color: #3fb950; }
+  /* Empty state */
+  .empty { text-align: center; padding: 24px; color: #8b949e; font-size: 13px; }
+  /* Loading */
+  .loading { text-align: center; padding: 40px; color: #8b949e; }
+  /* Error */
+  .error-msg { background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3);
+               border-radius: 8px; padding: 12px; color: #f85149; font-size: 13px;
+               margin-bottom: 12px; }
+  /* Time */
+  .time { font-size: 11px; color: #8b949e; }
+  /* Footer */
+  footer { text-align: center; padding: 24px 16px; font-size: 12px; color: #484f58; }
+  footer a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⚙ atelier</div>
+  <div class="refresh-info">
+    <span class="refresh-dot"></span>
+    <span id="refresh-timer">60s</span>
+  </div>
+</header>
+
+<main>
+  <div id="root"><div class="loading">加载中…</div></div>
+</main>
+
+<footer>
+  <a href="https://github.com/StevenG3/atelier" target="_blank">StevenG3/atelier</a>
+  &nbsp;·&nbsp; 每 60 秒自动刷新
+</footer>
+
+<script>
+const REPO = 'StevenG3/atelier';
+const API  = 'https://api.github.com';
+const HEADERS = { 'Accept': 'application/vnd.github.v3+json' };
+
+// ── Label → status mapping ──────────────────────────────────────────────
+function issueStatus(labels) {
+  const names = labels.map(l => l.name);
+  if (names.includes('needs-response'))   return { text: '⏸ Codex 等 Claude 回复', cls: 'badge-red' };
+  if (names.includes('needs-human'))      return { text: '🚨 等待人类决策',         cls: 'badge-red' };
+  if (names.includes('claude:review'))    return { text: '👁 Claude 评审中',        cls: 'badge-yellow' };
+  if (names.includes('codex:go'))         return { text: '⚡ Codex 实现中',          cls: 'badge-green' };
+  if (names.includes('claude:spec-ready'))return { text: '📋 规格就绪',              cls: 'badge-blue' };
+  if (names.includes('claude:design'))    return { text: '✏ Claude 写规格',          cls: 'badge-purple' };
+  if (names.includes('on-hold'))          return { text: '⏸ 暂停',                  cls: 'badge-gray' };
+  return { text: '○ 待分配', cls: 'badge-gray' };
+}
+
+function prStatus(pr) {
+  if (pr._approved) return { text: '✅ 等你合并',    cls: 'badge-green' };
+  return               { text: '👁 Claude 评审中', cls: 'badge-yellow' };
+}
+
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso)) / 1000;
+  if (diff < 60)    return '刚刚';
+  if (diff < 3600)  return Math.floor(diff/60) + ' 分钟前';
+  if (diff < 86400) return Math.floor(diff/3600) + ' 小时前';
+  return Math.floor(diff/86400) + ' 天前';
+}
+
+function truncate(text, max=120) {
+  return text.length > max ? text.slice(0, max) + '…' : text;
+}
+
+// ── API fetchers ─────────────────────────────────────────────────────────
+async function fetchJSON(url) {
+  const r = await fetch(url, { headers: HEADERS });
+  if (!r.ok) throw new Error(`API ${r.status}: ${url}`);
+  return r.json();
+}
+
+async function loadDashboard() {
+  const [issues, pulls, comments] = await Promise.all([
+    fetchJSON(`${API}/repos/${REPO}/issues?state=open&per_page=50`),
+    fetchJSON(`${API}/repos/${REPO}/pulls?state=open&per_page=20`),
+    fetchJSON(`${API}/repos/${REPO}/issues/comments?per_page=20&sort=created&direction=desc`),
+  ]);
+
+  // Separate real issues from PRs (GitHub returns PRs in issues list)
+  const prNumbers = new Set(pulls.map(p => p.number));
+  const realIssues = issues.filter(i => !prNumbers.has(i.number));
+
+  // Check PR approval status
+  const reviewChecks = await Promise.all(
+    pulls.map(pr =>
+      fetchJSON(`${API}/repos/${REPO}/pulls/${pr.number}/reviews`)
+        .then(reviews => {
+          const approved = reviews.some(r => r.state === 'APPROVED');
+          return { number: pr.number, approved };
+        })
+        .catch(() => ({ number: pr.number, approved: false }))
+    )
+  );
+  const approvalMap = Object.fromEntries(reviewChecks.map(r => [r.number, r.approved]));
+  pulls.forEach(pr => { pr._approved = approvalMap[pr.number] || false; });
+
+  // Categorize issues
+  const needsHuman   = realIssues.filter(i => i.labels.some(l => l.name === 'needs-human'));
+  const needsResp    = realIssues.filter(i => i.labels.some(l => l.name === 'needs-response')
+                                                && !i.labels.some(l => l.name === 'needs-human'));
+  const waitMerge    = pulls.filter(p => p._approved);
+  const inReview     = pulls.filter(p => !p._approved && p.labels.some(l => l.name === 'claude:review'));
+  const activeIssues = realIssues.filter(i =>
+    !i.labels.some(l => ['needs-human','needs-response'].includes(l.name))
+  );
+
+  return { needsHuman, needsResp, waitMerge, inReview, activeIssues, comments, pulls };
+}
+
+// ── Render ───────────────────────────────────────────────────────────────
+function renderCard(item, isPR=false) {
+  const url  = item.html_url;
+  const num  = `#${item.number}`;
+  const st   = isPR ? prStatus(item) : issueStatus(item.labels);
+  const ago  = timeAgo(item.updated_at);
+  return `
+    <div class="card">
+      <a href="${url}" target="_blank">
+        <div class="card-header">
+          <div class="card-title">${item.title}</div>
+          <div class="card-num">${num}</div>
+        </div>
+        <div class="card-meta">
+          <span class="badge ${st.cls}">${st.text}</span>
+          <span class="time">${ago}</span>
+        </div>
+      </a>
+    </div>`;
+}
+
+function renderActionCard(pr) {
+  return `
+    <div class="action-card">
+      <div class="action-title">PR #${pr.number} — ${pr.title}</div>
+      <div class="card-meta" style="margin-top:6px">
+        <span class="badge badge-green">✅ Claude 已 Approve</span>
+        <span class="time">${timeAgo(pr.updated_at)}</span>
+      </div>
+      <a class="action-cta" href="${pr.html_url}" target="_blank">点击合并 →</a>
+    </div>`;
+}
+
+function isDecision(text) {
+  return text.includes('**决策：**') || text.includes('**Decision:**');
+}
+
+function renderComment(c) {
+  const body  = c.body || '';
+  const isD   = isDecision(body);
+  const cls   = isD ? 'decision' : '';
+  const issue = c.html_url.match(/issues\/(\d+)/)?.[1];
+  const label = isD ? '🧠 Claude 决策' : (body.includes('@claude') ? '❓ Codex 提问' : '💬 评论');
+  const who   = c.user.login;
+  return `
+    <div class="comment">
+      <div class="comment-meta">${label} · ${who} · Issue #${issue || '?'} · ${timeAgo(c.created_at)}</div>
+      <div class="comment-body ${cls}">${truncate(body)}</div>
+    </div>`;
+}
+
+function render(data, error) {
+  if (error) {
+    document.getElementById('root').innerHTML = `
+      <div class="error-msg">⚠ 加载失败：${error}<br>
+      如果是首次使用，请确认仓库已公开或已配置 token。</div>`;
+    return;
+  }
+
+  const { needsHuman, needsResp, waitMerge, inReview, activeIssues, comments } = data;
+  const urgentCount = needsHuman.length + needsResp.length + waitMerge.length;
+  const activeCount = activeIssues.length + inReview.length;
+
+  let html = `
+    <div class="summary">
+      <div class="stat">
+        <div class="stat-num red">${urgentCount}</div>
+        <div class="stat-label">需要关注</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num green">${activeCount}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num yellow">${waitMerge.length}</div>
+        <div class="stat-label">待你合并</div>
+      </div>
+    </div>`;
+
+  // Action section: PRs ready to merge
+  if (waitMerge.length > 0) {
+    html += `<section>
+      <div class="section-title">⚡ 待你操作</div>
+      ${waitMerge.map(p => renderActionCard(p)).join('')}
+    </section>`;
+  }
+
+  // Human escalations
+  if (needsHuman.length > 0) {
+    html += `<section>
+      <div class="section-title">🚨 需要你决策</div>
+      ${needsHuman.map(i => renderCard(i)).join('')}
+    </section>`;
+  }
+
+  // Blocked issues
+  if (needsResp.length > 0) {
+    html += `<section>
+      <div class="section-title">⏸ Codex 等 Claude 回复</div>
+      ${needsResp.map(i => renderCard(i)).join('')}
+    </section>`;
+  }
+
+  // In-review PRs
+  if (inReview.length > 0) {
+    html += `<section>
+      <div class="section-title">👁 PR 评审中</div>
+      ${inReview.map(p => renderCard(p, true)).join('')}
+    </section>`;
+  }
+
+  // Active issues
+  if (activeIssues.length > 0) {
+    html += `<section>
+      <div class="section-title">📋 活跃 Issue</div>
+      ${activeIssues.map(i => renderCard(i)).join('')}
+    </section>`;
+  }
+
+  if (urgentCount + activeCount === 0) {
+    html += `<div class="empty">✓ 当前无待处理项</div>`;
+  }
+
+  // Recent activity
+  const recentComments = comments.slice(0, 8);
+  if (recentComments.length > 0) {
+    html += `<section>
+      <div class="section-title">💬 最近交互</div>
+      ${recentComments.map(c => renderComment(c)).join('')}
+    </section>`;
+  }
+
+  document.getElementById('root').innerHTML = html;
+}
+
+// ── Refresh loop ─────────────────────────────────────────────────────────
+let countdown = 60;
+const timerEl = () => document.getElementById('refresh-timer');
+
+async function refresh() {
+  try {
+    const data = await loadDashboard();
+    render(data, null);
+  } catch(e) {
+    render(null, e.message);
+  }
+  countdown = 60;
+}
+
+setInterval(() => {
+  countdown--;
+  const el = timerEl();
+  if (el) el.textContent = countdown + 's';
+  if (countdown <= 0) refresh();
+}, 1000);
+
+// Initial load
+refresh();
+</script>
+</body>
+</html>

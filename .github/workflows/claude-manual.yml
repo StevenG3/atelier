@@ -1,0 +1,70 @@
+# 手动触发 Claude 处理单个任务（GitHub mobile 备用继续键）
+#
+# 使用方式：
+#   GitHub mobile → Actions → "手动触发 Claude" → Run workflow
+#   填入 action（respond/review/design）和 Issue/PR 编号
+#
+# OAuth 模式下：此 workflow 打印提示，Claude Code 定时任务会在下次轮询时自动处理。
+# API key 模式下：取消注释 claude-code-action 步骤即可真正自动执行。
+
+name: 手动触发 Claude
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: '要执行的操作'
+        required: true
+        type: choice
+        options:
+          - respond
+          - review
+          - design
+      number:
+        description: 'Issue 或 PR 编号（数字）'
+        required: true
+        type: string
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- API key 模式（日后切换时取消注释）----
+      # - name: Claude 执行
+      #   uses: anthropics/claude-code-action@v1
+      #   with:
+      #     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+      #     prompt: |
+      #       atelier ${{ inputs.action }} ${{ inputs.number }}
+
+      # ---- OAuth 模式（当前）----
+      - name: 打印操作指令
+        run: |
+          echo "================================================"
+          echo "手动触发：${{ inputs.action }} #${{ inputs.number }}"
+          echo ""
+          echo "OAuth 模式下，Claude Code 定时任务将在下次轮询时自动处理。"
+          echo "如需立即处理，在 Claude Code 会话里说："
+          echo "  atelier ${{ inputs.action }} ${{ inputs.number }}"
+          echo "================================================"
+
+      - name: 打 needs-manual-trigger 标签（提示定时任务优先处理）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ACTION="${{ inputs.action }}"
+          NUMBER="${{ inputs.number }}"
+          case "$ACTION" in
+            respond|design)
+              gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+                --add-label "needs-response" 2>/dev/null || true
+              echo "已给 Issue #$NUMBER 打 needs-response 标签，Claude 定时任务将优先处理。"
+              ;;
+            review)
+              gh pr edit "$NUMBER" --repo "${{ github.repository }}" \
+                --add-label "claude:review" 2>/dev/null || true
+              echo "已给 PR #$NUMBER 打 claude:review 标签，Claude 定时任务将优先处理。"
+              ;;
+          esac

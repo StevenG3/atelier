@@ -11,37 +11,48 @@
 
 核心原则：**两个 Agent 不直接对话，只通过 GitHub 读写状态。** Claude 稀缺昂贵，只做高杠杆思考；Codex 充裕，承担一切吃 token 的体力活。
 
-## 日常使用（三步）
+## 📱 看板（手机直接打开）
+
+**https://steveng3.github.io/atelier/dashboard/**
+
+60 秒自动刷新，无需登录，显示所有活跃 Issue / PR 状态、Claude-Codex 最近交互、以及高亮"待你合并"的 PR。
+
+## 你只需要做两件事
+
+设置完成后，Claude 定时任务自动处理所有中间步骤：
+
+```
+① 创建 Issue（手机 GitHub mobile）→ 加 claude:design 标签
+              ↓
+    Claude 自动：写规格 → 打 codex:go → Codex 自动实现
+    Claude 自动：回复 Codex 问题、评审 PR
+              ↓
+② 合并 PR（手机 GitHub mobile 点 Merge）
+```
+
+## 完整工作流（全自动版）
+
+```
+你开 Issue（带验收标准 + project: <name>）→ 加 claude:design
+  → [自动] Claude 写规格 → 打 codex:go + codex:implement
+  → [自动] Codex 切分支实现
+  → [自动] Codex 遇问题 → @claude + needs-response
+  → [自动] Claude 回复决策 → Codex 继续
+  → [自动] Codex 开 PR + claude:review
+  → [自动] Claude 评审 → Approve
+  → 【你】合并 PR → 闭环
+```
+
+## 手动控制（需要时）
 
 ```bash
-# 1. 看谁在等你
-./scripts/atelier.sh status
-
-# 2. 拿到已填好的 Claude 提示词（自动找最高优先级）
-./scripts/atelier.sh next
-# 或指定：
-./scripts/atelier.sh prompt respond 5   # 回复 Codex 问题
-./scripts/atelier.sh prompt review 12   # 评审 PR
-./scripts/atelier.sh prompt design 8    # 写功能规格
-
-# 3. 把输出粘贴到 Claude Code
-#    或在 Claude Code 里直接说：atelier next（见 CLAUDE.md 触发短语）
-
-# 启动 Codex（规格就绪后）
-./scripts/atelier.sh go 5
+./scripts/atelier.sh status       # 查看所有待处理项
+./scripts/atelier.sh next         # 立即触发 Claude 处理最高优先级项
+./scripts/atelier.sh go <N>       # 手动给 Issue #N 加 codex:go
+./scripts/atelier.sh done <N>     # 停止 Codex（移除 codex:go）
 ```
 
-## 完整工作流
-
-```
-你开 Issue（带验收标准 + project: <name>）
-  → 打 claude:design → Claude 写规格 → 打 claude:spec-ready
-  → 你打 codex:go（或 ./scripts/atelier.sh go <N>）→ Codex 实现
-  → Codex 遇到问题 → @claude 评论 + needs-response 标签
-  → Claude 回复决策 → Codex 继续
-  → Codex 开 PR + claude:review → Claude 评审
-  → 【你合并】→ 闭环
-```
+或在 GitHub mobile → Actions → "手动触发 Claude" → Run workflow（备用继续键）。
 
 ## 接入新工程
 
