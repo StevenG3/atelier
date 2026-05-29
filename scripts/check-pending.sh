@@ -16,6 +16,12 @@
 set -euo pipefail
 
 REPO="${ATELIER_REPO:-StevenG3/atelier}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Preflight 依赖检查 ────────────────────────────────────────────────────
+# shellcheck source=preflight.sh
+source "$SCRIPT_DIR/preflight.sh"
+run_preflight
 
 timestamp() { date -u '+%Y-%m-%d %H:%M UTC'; }
 

@@ -21,6 +21,13 @@ PROMPTS_DIR="$REPO_ROOT/prompts"
 RED='\033[0;31m'; YELLOW='\033[0;33m'; GREEN='\033[0;32m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
+# ── Preflight 依赖检查（help 命令跳过，其他命令都检查）─────────────────────
+if [[ "${1:-help}" != "help" && "${1:-help}" != "-h" && "${1:-help}" != "--help" ]]; then
+  # shellcheck source=preflight.sh
+  source "$SCRIPT_DIR/preflight.sh"
+  run_preflight
+fi
+
 # ── 工具函数 ────────────────────────────────────────────────────────────────
 
 _copy_to_clipboard() {
