@@ -1,0 +1,39 @@
+# projects/example.yml
+#
+# 这是一个工程接入配置模板。
+# 复制此文件，重命名为 <your-project-name>.yml，按实际情况填写。
+# 文件名（不含 .yml）即为 Issue body 里 `project:` 字段的值。
+#
+# 使用方式：
+#   Issue body 第一行写 `project: example`（对应本文件名）
+#   Claude 和 Codex 读取此文件，知道要操作哪些 repo 和在哪找 Phase prompt。
+
+name: "示例工程"                 # 在看板里显示的名称
+github_org_or_user: "your-username"
+
+# 该工程包含的所有仓库（可以是多个联动的 repo）
+repos:
+  - id: service-a                # 内部引用 ID（在 prompts 和注释里使用）
+    github: "your-username/service-a"
+    local_path: "/home/user/projects/service-a"
+    role: "一句话描述这个 repo 在工程里的职责"
+
+  - id: service-b
+    github: "your-username/service-b"
+    local_path: "/home/user/projects/service-b"
+    role: "..."
+
+# Phase N Prompt 文件的存放目录（Claude 据此找到对应的规格文档）
+phases_prompt_dir: "/home/user/docs"
+phases_prompt_pattern: "CODEX_PHASE{n}_PROMPT.md"   # {n} 会被替换为 Phase 编号
+
+# 当前正在进行的 Phase
+current_phase: 1
+
+# 在 GitHub Project 看板里用于筛选的标识（填入 Project 的自定义字段 "工程"）
+project_tag: "example"
+
+# 工程级别的构建 / 测试命令（Codex 据此自我验证）
+build_command: "make build"
+test_command: "make test"
+lint_command: "make lint"

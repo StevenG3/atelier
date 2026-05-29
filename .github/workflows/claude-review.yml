@@ -25,11 +25,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # - name: Claude review
+      # ---- API key 模式（日后切换时取消注释）----
+      # - name: Claude review / response
       #   uses: anthropics/claude-code-action@v1   # 用前请核对最新版本
       #   with:
       #     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-      #     # 让 Claude 按 CLAUDE.md 的评审清单评审本 PR 的 diff
-      - name: placeholder
-        run: echo "在此接入 Claude 评审。详见文件顶部注释。"
+      #     system_prompt_suffix: |
+      #       你是 CLAUDE.md 定义的架构师。
+      #       回复 Codex 提问时使用以下格式（见 docs/interaction-protocol.md）：
+      #       **决策：** [一个清晰答案]
+      #       **理由：** [一句话]
+      #       **行动：** 继续 | 等人类 | 停止
+      #       评审 PR 时按 CLAUDE.md 评审清单输出 Approve 或 Request changes。
+      # ---- OAuth 模式（当前）----
+      - name: Log pending Claude task (OAuth mode)
+        run: |
+          echo "======================================================"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "检测到 PR #${{ github.event.pull_request.number }} 需要 Claude 评审。"
+            echo "请用以下模板触发 Claude Code："
+            echo "  prompts/claude-review.md.example  PR_NUMBER=${{ github.event.pull_request.number }}"
+          else
+            echo "检测到 @claude 提问（Issue/PR 评论）。"
+            echo "请用以下模板触发 Claude Code："
+            echo "  prompts/claude-respond.md.example  ISSUE_NUMBER=${{ github.event.issue.number }}"
+          fi
+          echo "或运行 scripts/check-pending.sh 查看所有待处理任务。"
+          echo "======================================================"
 

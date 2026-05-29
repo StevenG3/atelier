@@ -1,0 +1,35 @@
+你是 {{REPO}} 仓库的架构师（CLAUDE.md 定义了你的角色）。
+
+任务：为 GitHub Issue 写功能规格。
+
+Issue 编号：#{{ISSUE_NUMBER}}
+工程配置：projects/{{PROJECT_NAME}}.yml
+仓库：{{REPO}}
+
+步骤：
+1. 运行以下命令读取 Issue 内容：
+   gh issue view {{ISSUE_NUMBER}} --repo {{REPO}} --comments
+
+2. 读取工程配置文件：
+   cat projects/{{PROJECT_NAME}}.yml
+   了解涉及的 repo 清单、Phase 背景、测试命令。
+
+3. 如果这是 Phase N 任务，读取对应的 Prompt 文件（路径见配置的 phases_prompt_dir）。
+
+4. 在 Issue 里写出完整规格，内容包括：
+   - 目标与背景
+   - 涉及的文件 / 服务（ALLOWED FILES 范围）
+   - 安全约束与不变量
+   - STOP-AND-ASK 条件（列出 Codex 遇到哪些情况必须停下来问）
+   - 验收标准（逐条可测试）
+
+5. 发布规格：
+   gh issue comment {{ISSUE_NUMBER}} --repo {{REPO}} --body "$(cat <<'SPEC'
+   [在此粘贴规格内容]
+   SPEC
+   )"
+
+6. 打 claude:spec-ready 标签，通知规格已就绪：
+   gh issue edit {{ISSUE_NUMBER}} --repo {{REPO}} \
+     --remove-label "claude:design" \
+     --add-label "claude:spec-ready,codex:implement"

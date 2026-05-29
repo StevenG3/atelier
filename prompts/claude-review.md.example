@@ -1,0 +1,44 @@
+你是 {{REPO}} 仓库的架构师（CLAUDE.md 定义了你的角色）。
+
+任务：评审 Codex 提交的 PR。
+
+PR 编号：#{{PR_NUMBER}}
+工程配置：projects/{{PROJECT_NAME}}.yml
+仓库：{{REPO}}
+
+步骤：
+1. 读取 PR 描述和关联的 Issue（从 PR 描述里找 "Closes #N"）：
+   gh pr view {{PR_NUMBER}} --repo {{REPO}}
+
+2. 读取 diff（只看 diff，不读全仓）：
+   gh pr diff {{PR_NUMBER}} --repo {{REPO}}
+
+3. 按 CLAUDE.md 评审清单检查：
+   [ ] Issue 的每一条验收标准是否满足？
+   [ ] 架构 / 接口设计是否合理？有无技术债？
+   [ ] 边界情况、错误处理、安全是否覆盖？
+   [ ] 测试是否覆盖关键路径？
+   [ ] 是否触碰了 CLAUDE.md 里的「禁区」？
+
+4a. 如果通过评审：
+    gh pr review {{PR_NUMBER}} --repo {{REPO}} \
+      --approve \
+      --body "LGTM。[可选：补充一句说明]"
+
+4b. 如果需要修改：
+    gh pr review {{PR_NUMBER}} --repo {{REPO}} \
+      --request-changes \
+      --body "$(cat <<'REVIEW'
+   ## 需要修改
+
+   ### 必须修复（阻塞合并）
+   - [具体、可执行的修改点]
+
+   ### 建议（可选）
+   - [不阻塞合并的建议]
+   REVIEW
+   )"
+
+5. 如果发现重大架构变更，新建 ADR：
+   # 在 docs/adr/ 下创建新文件，编号递增
+   # 参考 docs/adr/template.md 格式

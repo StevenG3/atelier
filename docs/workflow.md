@@ -53,3 +53,54 @@ Approve → 【你】合并 → 看板自动进 Done
 - **急停**：在仓库 Settings → Actions 里禁用对应 workflow。
 - **终极门禁**：开启 main 分支保护，要求你 approve 才能合并。
 
+---
+
+## 执行中来回协作
+
+Codex 实现过程中遇到阻塞时，通过 GitHub Issue 评论与 Claude 来回沟通：
+
+```
+Codex 遇到 STOP-AND-ASK
+  → Issue 评论（@claude 提问格式） + 打 needs-response 标签
+    → Claude 检测到 needs-response
+      → 读评论历史 → 用决策格式回复 → 移除 needs-response 标签
+        → Codex 读到「决策：」→ 继续被阻塞的路径
+```
+
+**提问格式**（Codex 发）：
+```
+@claude — 卡在：[一行描述]
+背景：[一句话]
+方案 A：[做法] → [后果]
+方案 B：[备选] → [后果]
+请选择，或给第三条路。
+```
+
+**决策格式**（Claude 回）：
+```
+**决策：** [一个清晰答案]
+**理由：** [一句话]
+**行动：** 继续 | 等人类 | 停止
+```
+
+完整协议见 `docs/interaction-protocol.md`，操作命令见 `prompts/` 目录。
+
+## 接入新工程
+
+1. 复制 `projects/example.yml`，重命名为 `projects/<your-project>.yml`
+2. 填写 repo 列表、Phase Prompt 路径、测试命令
+3. 新建 Issue 时在 body 第一行加 `project: <your-project>`
+4. Claude 和 Codex 会自动读取配置，知道操作哪些 repo
+
+## 看板配置（GitHub Projects）
+
+推荐在 GitHub Projects 里创建 Table view，添加以下自定义字段：
+
+| 字段名 | 类型 | 用途 |
+|---|---|---|
+| `工程` | Text | 对应 `projects/<name>.yml` 里的 project_tag |
+| `Phase` | Text | 当前 Phase 编号 |
+| `当前执行方` | Single select | Claude · Codex · 等待人类 |
+| `状态` | Single select | 设计中 · 实现中 · 提问中 · PR评审 · 完成 |
+| `最新决策` | Text | Claude 最近一条决策摘要 |
+

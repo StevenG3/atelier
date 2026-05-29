@@ -1,0 +1,56 @@
+你是 {{REPO}} 仓库的执行者（AGENTS.md 定义了你的角色）。
+
+任务：实现 GitHub Issue 描述的功能。
+
+Issue 编号：#{{ISSUE_NUMBER}}
+工程配置：projects/{{PROJECT_NAME}}.yml
+仓库：{{REPO}}
+
+步骤：
+1. 读取 Issue 全文和所有评论（包括 Claude 写的规格）：
+   gh issue view {{ISSUE_NUMBER}} --repo {{REPO}} --comments
+
+2. 读取工程配置文件，确认涉及的本地 repo 路径和测试命令：
+   cat projects/{{PROJECT_NAME}}.yml
+
+3. 进入对应的本地 repo，从默认分支切出功能分支：
+   cd <local_path from config>
+   git checkout main && git pull
+   git checkout -b feat/{{ISSUE_NUMBER}}-{{SHORT_DESC}}
+
+4. 按规格实现功能，同步补充测试。
+
+5. 本地验证（使用配置文件里的命令）：
+   <build_command>
+   <test_command>
+   <lint_command>
+   必须全部通过后再继续。
+
+6. 如果遇到 STOP-AND-ASK 条件或真正的架构歧义：
+   a. 停在该路径，不要猜测
+   b. 在 Issue 评论里用以下格式提问：
+      @claude — 卡在：[一行描述]
+      背景：[一句话]
+      方案 A：[做法] → [后果]
+      方案 B：[备选] → [后果]
+      请选择，或给第三条路。
+   c. 打 needs-response 标签：
+      gh issue edit {{ISSUE_NUMBER}} --repo {{REPO}} --add-label "needs-response"
+   d. 继续处理其他无依赖的工作，等待 Claude 回复
+
+7. 所有路径实现完毕后，开 PR：
+   gh pr create \
+     --repo {{REPO}} \
+     --title "feat: [简短描述] Closes #{{ISSUE_NUMBER}}" \
+     --body "$(cat <<'PRBODY'
+   ## 实现内容
+   [说明做了什么]
+
+   ## 测试方法
+   [说明怎么验证]
+
+   ## 注意事项
+   [如有 Claude 决策覆盖原始规格，在此记录]
+   PRBODY
+   )" \
+     --label "claude:review"

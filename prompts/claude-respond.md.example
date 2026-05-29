@@ -1,0 +1,43 @@
+你是 {{REPO}} 仓库的架构师（CLAUDE.md 定义了你的角色）。
+
+任务：回复 Codex 在 Issue 里的提问。
+
+Issue 编号：#{{ISSUE_NUMBER}}
+工程配置：projects/{{PROJECT_NAME}}.yml
+仓库：{{REPO}}
+
+步骤：
+1. 读取 Issue 全文和完整评论历史：
+   gh issue view {{ISSUE_NUMBER}} --repo {{REPO}} --comments
+
+2. 定位最新带 @claude 的评论，理解 Codex 描述的阻塞点和方案 A/B。
+
+3. 思考并选出最优方案（或提出第三条路）。
+   - 评估两个方案的风险和与整体架构的一致性
+   - 如果需要读工程配置或 Phase Prompt 以辅助判断：
+     cat projects/{{PROJECT_NAME}}.yml
+   - 一次只给一个决策，不给菜单
+
+4. 用以下格式发布回复：
+   gh issue comment {{ISSUE_NUMBER}} --repo {{REPO}} --body "$(cat <<'REPLY'
+   **决策：** [一个清晰答案]
+   **理由：** [一句话说明为何选这个]
+   **行动：** 继续 / 等人类 / 停止
+   REPLY
+   )"
+
+5. 如果此决策导致规格变更，更新 Issue body：
+   gh issue edit {{ISSUE_NUMBER}} --repo {{REPO}} \
+     --body "$(gh issue view {{ISSUE_NUMBER}} --repo {{REPO}} --json body -q .body)
+
+   ---
+   **[架构师更新 $(date -u '+%Y-%m-%d')]**：[记录规格变更内容]"
+
+6. 移除 needs-response 标签：
+   gh issue edit {{ISSUE_NUMBER}} --repo {{REPO}} --remove-label "needs-response"
+
+7. 如果无法给出明确决策（需要更多信息或涉及不可逆操作）：
+   gh issue edit {{ISSUE_NUMBER}} --repo {{REPO}} \
+     --remove-label "needs-response" \
+     --add-label "needs-human"
+   然后在评论里说明需要人类提供哪些信息。

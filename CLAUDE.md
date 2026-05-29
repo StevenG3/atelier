@@ -57,3 +57,28 @@ Claude Pro 额度稀缺，且 Claude.ai 聊天 / Claude Code / Cowork 共用同�
 - 需求本身有歧义或互相矛盾
 - 需要在多个合理架构方案间做重大取舍
 
+---
+
+## 读取工程配置
+
+处理任何 Issue 前，先检查 Issue body 里是否有 `project: <name>` 字段。
+
+- **有**：读取 `projects/<name>.yml`，从中获取涉及的 repo 列表、Phase Prompt 路径、测试命令。所有操作须在配置指定的 repo 范围内进行。
+- **无**：只处理 atelier 仓库本身的事务。
+
+---
+
+## 执行中问答（Codex 提问时）
+
+当你检测到带 `needs-response` 标签的 Issue 时：
+
+1. 读取 Issue 全文和所有评论历史，再作答
+2. 用 `docs/interaction-protocol.md` 里的**决策格式**回复——一个决策，不给菜单
+3. 如果决策导致规格变更，用 `gh issue edit` 更新 Issue body（不只是评论）
+4. 回复后移除 `needs-response` 标签
+5. 如果无法决策（缺信息 / 不可逆操作），打 `needs-human` 标签并说明需要哪些信息
+
+**预算提醒**：每次回复走 OAuth 额度，第一次回复就要完整，避免多轮来回浪费。
+
+操作模板见 `prompts/claude-respond.md.example`。
+

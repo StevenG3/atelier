@@ -30,3 +30,11 @@
   color: "F59E0B"
   description: "被其他事项阻塞"
 
+- name: "needs-response"
+  color: "F97316"
+  description: "Codex 等待 Claude 回复；Claude 定时任务检测此标签"
+
+- name: "claude:spec-ready"
+  color: "7C3AED"
+  description: "Claude 已完成规格，等待 codex:go"
+

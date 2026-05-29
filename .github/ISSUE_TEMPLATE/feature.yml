@@ -2,6 +2,20 @@ name: "实现任务 (Codex)"
 description: "规格已就绪，可直接交给 Codex 实现"
 labels: ["codex:implement"]
 body:
+  - type: input
+    id: project
+    attributes:
+      label: "project"
+      description: "projects/ 下的配置文件名（不含 .yml）。Claude 和 Codex 据此加载工程配置。"
+      placeholder: "example"
+    validations:
+      required: false
+  - type: input
+    id: phase
+    attributes:
+      label: "Phase"
+      description: "如果是 Phase N 实现任务，填写编号（如 24）。留空表示非 Phase 任务。"
+      placeholder: "24"
   - type: textarea
     id: what
     attributes:
