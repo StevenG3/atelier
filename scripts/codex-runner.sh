@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# codex-runner.sh — 全自动闭环触发器(本地 OAuth,无需 API key)
+# codex-runner.sh — codex 实现环节(被 orchestrator.sh 调用,也可独立跑)
 #
-# 完整链路:
-#   codex:go 标签
-#     → codex exec (ChatGPT OAuth) 实现 → 跑测试 → 推分支 → 开 PR
-#       → claude -p (Claude OAuth) 评审 → gh pr review 写回 GitHub
-#         → 人类合并 PR
+# 职责(单一):
+#   codex:go 标签 → codex exec (ChatGPT OAuth) 实现 → 跑测试
+#     → 推分支 → 开 PR → 打 claude:review 标签 → Issue 评论
 #
-# codex 和 claude 都以本地 headless OAuth 运行,runner 串起两者。
-# 关闭 Claude 自动评审:设 ATELIER_WAKE_CLAUDE=false。
+# 评审 / 自动合并 / 规划下一 Phase 由 orchestrator.sh 统一负责。
+# 本脚本只管"把一个 codex:go 变成一个待评审 PR"。
 #
 # 状态机(防重复触发):
 #   codex:go            待处理
@@ -200,32 +198,6 @@ gh pr edit "$pr_url" --repo "$repo_github" --add-label "$review_label" 2>/dev/nu
 gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
   --body "$(printf '🤖 codex-runner 完成实现。\n- 分支:\`%s\`\n- PR:%s\n- %s' "$branch" "$pr_url" "$status_note")" 2>/dev/null || true
 
-log "Issue #$issue_num 处理完毕 → $pr_url"
-
-# ── 11. 唤醒 Claude 评审(headless,仅测试通过的 PR)─────────────────────
-# Claude 也走 OAuth(claude -p),与 codex exec 对称,串起全自动闭环。
-# 测试未通过的 PR 已转 needs-human,不浪费 Claude 评审坏 PR。
-if [[ "$test_passed" -eq 1 && "${ATELIER_WAKE_CLAUDE:-true}" == "true" ]]; then
-  pr_number=$(printf '%s' "$pr_url" | grep -oE '[0-9]+$' || true)
-  log "唤醒 Claude 评审 PR #$pr_number …"
-  claude -p "你是 Atelier 架构师(见 StevenG3/atelier 的 CLAUDE.md)。
-
-任务:评审 PR ${repo_github}#${pr_number},它实现了 Atelier Issue ${ATELIER_REPO}#${issue_num}。
-
-步骤:
-1. gh pr view ${pr_number} --repo ${repo_github} 读 PR 描述
-2. gh pr diff ${pr_number} --repo ${repo_github} 读 diff(只看 diff)
-3. 按 CLAUDE.md 评审清单检查:Issue 的 ACCEPTANCE CRITERIA 是否满足、SAFETY INVARIANTS 是否成立、测试是否覆盖、是否触碰 FORBIDDEN SCOPE
-4. gh pr review ${pr_number} --repo ${repo_github} --approve(或 --request-changes --body 给出具体修改点)
-5. gh issue comment ${issue_num} --repo ${ATELIER_REPO} 写一句评审结论
-不要合并 PR(合并是人类的权力)。" \
-    --permission-mode acceptEdits \
-    --allowedTools "Bash" \
-    >>"$RUN_LOG" 2>&1 \
-    && log "Claude 评审完成" \
-    || { log "Claude 评审唤醒失败(非致命);PR 仍带 claude:review 标签,Claude 定时任务/人工可兜底"; \
-         gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
-           --body "⚠️ 自动唤醒 Claude 评审失败,PR $pr_url 已打 claude:review,请手动触发或等定时任务。" 2>/dev/null || true; }
-fi
-
-log "Issue #$issue_num 全流程结束 → $pr_url"
+# 输出 PR URL 供 orchestrator 捕获(最后一行)
+echo "PR_URL=$pr_url"
+log "Issue #$issue_num 实现环节完成 → $pr_url(待 orchestrator 评审)"

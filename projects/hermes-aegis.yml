@@ -43,3 +43,39 @@ project_tag: "hermes-aegis"
 build_command: "docker compose -f deploy/docker-compose.yml build"
 test_command: "make test"
 lint_command: "make verify"
+
+# ── 自主开发循环：终极目标（North Star）─────────────────────────────
+# Claude 规划下一个 Phase 时读此目标 + git 进度，自主决定下一步。
+north_star: |
+  以自然语言为输入输出，做一个集市场分析、买点提示、自动下单、
+  美港股 / 币圈自动交易于一体的大型综合交易系统。
+  用户在 Telegram/Feishu 用自然语言下达意图 → Hermes 解析 →
+  TradingAgents 出分析与买卖信号 → Aegis 风控/编排/执行 →
+  交易所(Binance)/IBKR 下单(paper 与 live)。
+  每个 Phase 在前一 Phase 基础上增量推进，始终 fail-closed：
+  live 交易、动钱、改 schema 等高危能力默认关闭，需显式逐层解锁。
+
+# ── 自主循环护栏（orchestrator daemon 读取）────────────────────────
+autonomy:
+  enabled: true
+  auto_merge: true            # Claude approve 即自动合并(用户选定)
+  auto_codex_go: true         # 规划出 Phase 后自动打 codex:go(用户选定)
+  max_phases_per_day: 10      # 每日自动 Phase 上限(熔断)
+  max_consecutive_failures: 2 # 连续失败上限,超过暂停整个循环
+  kill_switch_file: ".atelier-stop"   # 此文件存在 → 立即暂停全循环
+
+  # 重点审查清单:作为「给 Claude 评审时的高危提示」注入,命中这些的改动
+  # Claude 会格外谨慎。决定权完全在 Claude——它可 APPROVE / CHANGES /
+  # ESCALATE(主动求助人类)。不再用死关键词替 Claude 强制人类合并。
+  review_focus:
+    - "alter table"           # schema 迁移
+    - "migration"
+    - "DROP "
+    - "billing"               # 计费 / 钱
+    - "LIVE_TRADING_ENABLED"  # live 交易开关
+    - "IBKR_LIVE_TRADING_ENABLED"
+    - "IBKR_ALLOW_LIVE_PORT"
+    - "secret"                # 密钥
+    - "api_key"
+    - "deploy/docker-compose" # 生产配置
+    - ".env"
