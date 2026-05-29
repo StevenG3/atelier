@@ -38,3 +38,7 @@
   color: "7C3AED"
   description: "Claude 已完成规格，等待 codex:go"
 
+- name: "codex:working"
+  color: "0E8A16"
+  description: "codex-runner 正在实现此 Issue（防止重复触发；处理完自动移除）"
+
