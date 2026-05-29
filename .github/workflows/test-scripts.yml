@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 安装 bats
-        run: npm install -g bats
+        run: sudo apt-get install -y bats
 
       - name: 运行全部测试
         run: bats tests/ --formatter tap
