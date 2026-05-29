@@ -11,20 +11,52 @@
 
 核心原则：**两个 Agent 不直接对话，只通过 GitHub 读写状态。** Claude 稀缺昂贵，只做高杠杆思考；Codex 充裕，承担一切吃 token 的体力活。
 
-## 怎么开始
+## 日常使用（三步）
 
-1. 读 [`docs/workflow.md`](docs/workflow.md) 了解看板列与标签路由。
-2. Claude 的工作准则见 [`CLAUDE.md`](CLAUDE.md)，Codex 的见 [`AGENTS.md`](AGENTS.md)。
-3. 架构决策记录在 [`docs/adr/`](docs/adr/)。
-4. 用 `.github/labels.yml` 同步标签，用 Issue / PR 模板开卡。
-5. `.github/workflows/` 里是触发 Agent 的 Action 骨架（需填入你的凭据，见文件内注释）。
+```bash
+# 1. 看谁在等你
+./scripts/atelier.sh status
 
-## 一句话工作流
+# 2. 拿到已填好的 Claude 提示词（自动找最高优先级）
+./scripts/atelier.sh next
+# 或指定：
+./scripts/atelier.sh prompt respond 5   # 回复 Codex 问题
+./scripts/atelier.sh prompt review 12   # 评审 PR
+./scripts/atelier.sh prompt design 8    # 写功能规格
+
+# 3. 把输出粘贴到 Claude Code
+#    或在 Claude Code 里直接说：atelier next（见 CLAUDE.md 触发短语）
+
+# 启动 Codex（规格就绪后）
+./scripts/atelier.sh go 5
+```
+
+## 完整工作流
 
 ```
-你开 Issue（带验收标准）
-  → 打标签 codex:implement → Codex 在分支实现、开 PR
-  → PR 打开触发 claude:review → Claude 评审
-  → 需改则 Codex 自己迭代；通过则【你合并】→ 闭环
+你开 Issue（带验收标准 + project: <name>）
+  → 打 claude:design → Claude 写规格 → 打 claude:spec-ready
+  → 你打 codex:go（或 ./scripts/atelier.sh go <N>）→ Codex 实现
+  → Codex 遇到问题 → @claude 评论 + needs-response 标签
+  → Claude 回复决策 → Codex 继续
+  → Codex 开 PR + claude:review → Claude 评审
+  → 【你合并】→ 闭环
 ```
+
+## 接入新工程
+
+复制 `projects/example.yml` → `projects/<your-project>.yml`，填写 repo 列表和测试命令。  
+新建 Issue 时在 body 第一行写 `project: <your-project>`。
+
+## 文档索引
+
+| 文件 | 内容 |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | Claude 角色、触发短语、问答协议 |
+| [`AGENTS.md`](AGENTS.md) | Codex 角色、工作流、提问规范 |
+| [`docs/workflow.md`](docs/workflow.md) | 看板列、标签路由、控制点 |
+| [`docs/interaction-protocol.md`](docs/interaction-protocol.md) | 问答格式规范 |
+| [`prompts/`](prompts/) | 四种操作的提示词模板 |
+| [`projects/`](projects/) | 工程接入配置文件 |
+| [`scripts/atelier.sh`](scripts/atelier.sh) | 用户侧 CLI 工具 |
 

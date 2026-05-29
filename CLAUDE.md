@@ -59,6 +59,22 @@ Claude Pro 额度稀缺，且 Claude.ai 聊天 / Claude Code / Cowork 共用同�
 
 ---
 
+## 触发短语（用户在 Claude Code 里直接说）
+
+当用户说以下短语时，Claude 无需等待更多说明，直接执行对应操作：
+
+| 用户说的 | Claude 做的 |
+|---|---|
+| `atelier next` | 运行 `scripts/check-pending.sh`，处理优先级最高的待办项（needs-response → claude:review → claude:design） |
+| `atelier respond <N>` | 读 Issue #N 的全部评论，用决策格式回复 Codex 的最新问题 |
+| `atelier review <N>` | 读 PR #N 的 diff，按评审清单给出 Approve 或 Request changes |
+| `atelier design <N>` | 读 Issue #N，写完整功能规格，打 `claude:spec-ready` 标签 |
+| `atelier status` | 运行 `scripts/atelier.sh status`，报告当前所有待处理项 |
+
+操作时使用 `gh` CLI 把结果写回 GitHub（comment / label / review），不只是回复用户。
+
+---
+
 ## 读取工程配置
 
 处理任何 Issue 前，先检查 Issue body 里是否有 `project: <name>` 字段。
