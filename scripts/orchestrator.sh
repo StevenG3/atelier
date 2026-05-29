@@ -4,7 +4,8 @@
 # 你只启动它(经 orchestrator-daemon.sh 周期跑)。每个 tick 按优先级处理
 # 一件最高优先级事项,靠 daemon 循环推进整条链路:
 #
-#   ① claude:review PR   → claude -p 评审:
+#   ⓪ CI failing PR      → codex 读失败日志自修 → push → CI 重跑(上限N次)
+#   ① claude:review PR   → CI 通过才评审;claude -p:
 #                            禁区命中 → needs-human(强制人类合并)
 #                            approve  → 自动合并 → 更新 current_phase
 #                            改动请求 → request-changes,重打 codex:go
@@ -48,6 +49,7 @@ AUTO_MERGE=$(yget "auto_merge")
 AUTO_CODEX_GO=$(yget "auto_codex_go")
 MAX_PHASES_DAY=$(yget "max_phases_per_day"); MAX_PHASES_DAY=${MAX_PHASES_DAY:-3}
 MAX_FAILS=$(yget "max_consecutive_failures"); MAX_FAILS=${MAX_FAILS:-2}
+MAX_CI_FIXES=$(yget "max_ci_fixes_per_pr"); MAX_CI_FIXES=${MAX_CI_FIXES:-3}
 KILL_FILE=$(yget "kill_switch_file"); KILL_FILE=${KILL_FILE:-.atelier-stop}
 REPO_PATH=$(yget_repo "local_path")
 REPO_GH=$(yget_repo "github")
@@ -99,14 +101,68 @@ run_claude() {
   claude -p "$prompt" --permission-mode acceptEdits --allowedTools "Bash" 2>&1
 }
 
+# PR 的 GitHub CI 汇总状态:pass / fail / pending / none
+ci_state() {
+  local pr="$1" states
+  states=$(gh pr checks "$pr" --repo "$REPO_GH" --json state --jq '[.[].state]|join(",")' 2>/dev/null || echo "")
+  if [[ -z "$states" || "$states" == "[]" ]]; then echo "none"; return; fi
+  if grep -qiE "FAILURE|ERROR|CANCELLED|TIMED_OUT" <<<"$states"; then echo "fail"; return; fi
+  if grep -qiE "PENDING|IN_PROGRESS|QUEUED|WAITING|REQUESTED" <<<"$states"; then echo "pending"; return; fi
+  echo "pass"
+}
+
 # ════════════════════════════════════════════════════════════════════════
-# ① claude:review 的 PR → 评审 + (禁区检测 / 自动合并 / 打回)
+# ⓪ CI failing 的 PR → codex 自主读失败日志修复(带次数上限)
+# ════════════════════════════════════════════════════════════════════════
+for cipr in $(gh pr list --repo "$REPO_GH" --state open --json number --jq '.[].number' 2>/dev/null); do
+  st=$(ci_state "$cipr")
+  [[ "$st" == "fail" ]] || continue
+  CI_FIX_FILE="$STATE_DIR/ci_fixes_${cipr}"
+  fixes=$(cat "$CI_FIX_FILE" 2>/dev/null || echo 0)
+  if (( fixes >= MAX_CI_FIXES )); then
+    audit "⓪ PR #$cipr CI 已修 $fixes 次仍失败(上限 $MAX_CI_FIXES)→ ESCALATE needs-human"
+    gh pr edit "$cipr" --repo "$REPO_GH" --remove-label "claude:review" --add-label "needs-human" 2>/dev/null || true
+    gh pr comment "$cipr" --repo "$REPO_GH" --body "🚨 CI 连续 $fixes 次自动修复仍失败,需你介入。" 2>/dev/null || true
+    record_fail; exit 0
+  fi
+  audit "⓪ PR #$cipr CI 失败 → codex 第 $((fixes+1)) 次修复"
+  # checkout PR 分支
+  pr_branch=$(gh pr view "$cipr" --repo "$REPO_GH" --json headRefName --jq '.headRefName' 2>/dev/null)
+  cd "$REPO_PATH"
+  git fetch origin >>"$AUDIT_LOG" 2>&1 || true
+  git checkout "$pr_branch" >>"$AUDIT_LOG" 2>&1 && git pull --ff-only >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ checkout $pr_branch 失败"; record_fail; exit 1; }
+  # codex 读 CI 失败日志并修复(它自己用 gh 抓日志)
+  printf '%s' "PR #${cipr} 的 GitHub CI 失败了。请用 \`gh pr checks ${cipr} --repo ${REPO_GH}\` 和 \`gh run view --log-failed\` 查看失败的具体原因(lint/类型/测试等),然后在当前已 checkout 的 PR 分支上修复代码使 CI 能通过。只改工作区文件,不要 git commit/push(外层处理)。" \
+    | codex exec -s workspace-write -C "$REPO_PATH" --skip-git-repo-check \
+        -o "$STATE_DIR/ci-fix-${cipr}-last.md" >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ codex 修复异常"; record_fail; exit 1; }
+  git add -A >>"$AUDIT_LOG" 2>&1 || true
+  if git diff --cached --quiet; then
+    audit "  ⚠️ codex 未产生修复改动 → ESCALATE needs-human"
+    gh pr edit "$cipr" --repo "$REPO_GH" --remove-label "claude:review" --add-label "needs-human" 2>/dev/null || true
+    record_fail; exit 0
+  fi
+  git commit -m "fix: CI repair attempt $((fixes+1)) for ${ATELIER_REPO}#? (PR #${cipr})" >>"$AUDIT_LOG" 2>&1 || true
+  git push >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ push 失败"; record_fail; exit 1; }
+  echo $(( fixes + 1 )) > "$CI_FIX_FILE"
+  audit "  ✓ 已推送 CI 修复,等 CI 重跑(下个 tick 复检)"
+  record_ok; exit 0
+done
+
+# ════════════════════════════════════════════════════════════════════════
+# ① claude:review 的 PR → 评审 + (CI 门禁 / 自动合并 / 打回)
 # ════════════════════════════════════════════════════════════════════════
 pr_num=$(gh pr list --repo "$REPO_GH" --label "claude:review" --state open \
   --json number --jq 'sort_by(.number)|.[0].number // empty' 2>/dev/null || true)
 
 if [[ -n "$pr_num" ]]; then
-  audit "① 评审 PR $REPO_GH#$pr_num"
+  # CI 门禁:只评审 CI 通过(或无 CI)的 PR;pending 等待,fail 交给 ⓪
+  ci=$(ci_state "$pr_num")
+  if [[ "$ci" == "pending" ]]; then
+    audit "① PR #$pr_num CI 运行中,本 tick 等待。"; exit 0
+  elif [[ "$ci" == "fail" ]]; then
+    audit "① PR #$pr_num CI 失败,交由 ⓪ 修复(下个 tick)。"; exit 0
+  fi
+  audit "① 评审 PR $REPO_GH#$pr_num(CI=$ci)"
   # 禁区关键词降级为「给 Claude 的重点审查清单」,决定权完全交给 Claude。
   checklist=$(printf '%s; ' "${REVIEW_FOCUS[@]}")
 

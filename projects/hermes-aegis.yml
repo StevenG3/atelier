@@ -62,6 +62,7 @@ autonomy:
   auto_codex_go: true         # 规划出 Phase 后自动打 codex:go(用户选定)
   max_phases_per_day: 10      # 每日自动 Phase 上限(熔断)
   max_consecutive_failures: 2 # 连续失败上限,超过暂停整个循环
+  max_ci_fixes_per_pr: 3      # 单个 PR 的 CI 自动修复次数上限,超过 Claude ESCALATE
   kill_switch_file: ".atelier-stop"   # 此文件存在 → 立即暂停全循环
 
   # 重点审查清单:作为「给 Claude 评审时的高危提示」注入,命中这些的改动
