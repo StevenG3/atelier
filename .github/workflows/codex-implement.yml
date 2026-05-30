@@ -1,33 +1,42 @@
-# Codex 实现 workflow（骨架，需配置后启用）
+# 事件驱动的自主开发循环触发器(self-hosted runner)
 #
-# 触发：Issue 被打上 codex:implement + codex:go 标签时，让 Codex 实现并开 PR。
+# 拉起方式:打 codex:go 标签 → GitHub 瞬间触发本 workflow → 你机器上的
+# self-hosted runner 跑 orchestrator 一个 tick。无需常驻 daemon。
 #
-# 说明：Codex 的 GitHub 集成主要通过「OpenAI Codex GitHub App / Codex cloud 任务」完成，
-#       而不是一个简单的 marketplace action。两种常见接法：
-#         A) 安装 Codex 的 GitHub App，在 Codex 端配置「按标签/@mention 触发」，
-#            此 workflow 仅用于把状态同步回看板。
-#         B) 在 Action 里用 OpenAI API + Codex CLI 自建触发（需 OPENAI_API_KEY）。
-#       具体能力以 OpenAI Codex 当前文档为准：https://developers.openai.com/codex
+# 安全(public repo + self-hosted runner):
+#   - 仅 issues labeled(打标签需仓库写权限,外部 fork 无法触发)
+#     + schedule(内部定时)+ workflow_dispatch(手动)触发
+#   - 绝不用 pull_request 触发(避免 fork PR 在本机跑任意代码)
+#   - 若要更彻底的隔离,可将 repo 设为 private
 #
-# ⚠️ Codex $100 档的 10x 促销在 2026-05-31 结束，之后为 5x，排期心里有数。
+# 注册 runner:见 docs/SELF_HOSTED_RUNNER.md
 
-name: codex-implement
+name: orchestrator
+
 on:
   issues:
-    types: [labeled]
+    types: [labeled]          # 打 codex:go → 即时拉起
+  workflow_dispatch: {}        # 手动触发一个 tick
+  schedule:
+    - cron: "*/10 * * * *"     # 兜底:每10分钟推进 CI修复/评审/合并/规划
+
+# 同一时刻只跑一个 tick(orchestrator 内部也有 flock 双保险)
+concurrency:
+  group: orchestrator-hermes-aegis
+  cancel-in-progress: false
 
 jobs:
-  dispatch:
-    if: github.event.label.name == 'codex:go'
-    runs-on: ubuntu-latest
+  tick:
+    # issue 事件只在 codex:go 标签时跑;schedule/手动总是跑
+    if: >
+      github.event_name != 'issues' ||
+      github.event.label.name == 'codex:go'
+    runs-on: self-hosted
     steps:
-      - name: placeholder
+      - name: orchestrator tick
+        env:
+          HOME: /home/gggqqy
         run: |
-          echo "Issue #${{ github.event.issue.number }} 已标记 codex:go。"
-          echo "在此触发 Codex 实现（见文件顶部两种接法）。"
-      # - name: 触发 Codex（示例：调用 Codex CLI / OpenAI API）
-      #   env:
-      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      #   run: |
-      #     # codex exec --issue ${{ github.event.issue.number }} ...
-
+          export PATH="/home/gggqqy/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+          cd /home/gggqqy/archives/atelier
+          bash scripts/orchestrator.sh hermes-aegis
