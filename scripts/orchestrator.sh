@@ -21,6 +21,9 @@
 
 set -uo pipefail
 
+# Non-interactive SSH/daemon shells do not always load user npm/global tool paths.
+export PATH="$PATH:$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.bun/bin"
+
 PROJECT="${1:-hermes-aegis}"
 ATELIER_REPO="${ATELIER_REPO:-StevenG3/atelier}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
