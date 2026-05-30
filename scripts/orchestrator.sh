@@ -137,7 +137,7 @@ phase_for_pr() {
 # claude -p 封装(headless,允许 Bash 跑 gh/git)
 run_claude() {
   local prompt="$1"
-  claude -p "$prompt" --permission-mode acceptEdits --allowedTools "Bash" 2>&1
+  timeout "${CLAUDE_TIMEOUT_S:-900}" claude -p "$prompt" --permission-mode acceptEdits --allowedTools "Bash" 2>&1
 }
 
 # PR/Issue 标签操作 — gh 2.4.0 的 gh pr edit --label 走 GraphQL 会因 projects
