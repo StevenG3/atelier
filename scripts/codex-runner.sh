@@ -194,7 +194,9 @@ else
     --remove-label "codex:working" --add-label "needs-human" 2>/dev/null || true
 fi
 
-gh pr edit "$pr_url" --repo "$repo_github" --add-label "$review_label" 2>/dev/null || true
+# gh 2.4.0 的 gh pr edit --label 走 GraphQL 会失败,用 REST(PR 共用 issues/{n}/labels)
+pr_number=$(printf '%s' "$pr_url" | grep -oE '[0-9]+$')
+echo "{\"labels\":[\"$review_label\"]}" | gh api "repos/$repo_github/issues/$pr_number/labels" --method POST --input - --silent 2>/dev/null || true
 gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
   --body "$(printf '🤖 codex-runner 完成实现。\n- 分支:\`%s\`\n- PR:%s\n- %s' "$branch" "$pr_url" "$status_note")" 2>/dev/null || true
 

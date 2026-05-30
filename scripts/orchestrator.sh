@@ -101,14 +101,21 @@ run_claude() {
   claude -p "$prompt" --permission-mode acceptEdits --allowedTools "Bash" 2>&1
 }
 
+# PR/Issue 标签操作 — gh 2.4.0 的 gh pr edit --label 走 GraphQL 会因 projects
+# classic deprecation 失败,统一用 REST API(PR 与 issue 共用 issues/{n}/labels)。
+gh_add_label()  { echo "{\"labels\":[\"$3\"]}" | gh api "repos/$1/issues/$2/labels" --method POST --input - --silent 2>/dev/null || true; }
+gh_rm_label()   { local enc; enc=$(printf '%s' "$3" | sed 's/:/%3A/g'); gh api "repos/$1/issues/$2/labels/$enc" --method DELETE --silent 2>/dev/null || true; }
+
 # PR 的 GitHub CI 汇总状态:pass / fail / pending / none
+# gh 2.4.0 的 gh pr checks 无 --json,解析文本输出(第二列状态词)。
 ci_state() {
-  local pr="$1" states
-  states=$(gh pr checks "$pr" --repo "$REPO_GH" --json state --jq '[.[].state]|join(",")' 2>/dev/null || echo "")
-  if [[ -z "$states" || "$states" == "[]" ]]; then echo "none"; return; fi
-  if grep -qiE "FAILURE|ERROR|CANCELLED|TIMED_OUT" <<<"$states"; then echo "fail"; return; fi
-  if grep -qiE "PENDING|IN_PROGRESS|QUEUED|WAITING|REQUESTED" <<<"$states"; then echo "pending"; return; fi
-  echo "pass"
+  local pr="$1" out
+  out=$(gh pr checks "$pr" --repo "$REPO_GH" 2>&1 || true)
+  grep -qiE "no check|no status|^$" <<<"$out" && [[ -z "$(grep -iwE 'fail|pass|pending' <<<"$out")" ]] && { echo none; return; }
+  grep -qiw fail <<<"$out"                         && { echo fail;    return; }
+  grep -qiwE "pending|in_progress|queued" <<<"$out" && { echo pending; return; }
+  grep -qiw pass <<<"$out"                         && { echo pass;    return; }
+  echo none
 }
 
 # ════════════════════════════════════════════════════════════════════════
@@ -121,7 +128,7 @@ for cipr in $(gh pr list --repo "$REPO_GH" --state open --json number --jq '.[].
   fixes=$(cat "$CI_FIX_FILE" 2>/dev/null || echo 0)
   if (( fixes >= MAX_CI_FIXES )); then
     audit "⓪ PR #$cipr CI 已修 $fixes 次仍失败(上限 $MAX_CI_FIXES)→ ESCALATE needs-human"
-    gh pr edit "$cipr" --repo "$REPO_GH" --remove-label "claude:review" --add-label "needs-human" 2>/dev/null || true
+    gh_rm_label "$REPO_GH" "$cipr" "claude:review"; gh_add_label "$REPO_GH" "$cipr" "needs-human"
     gh pr comment "$cipr" --repo "$REPO_GH" --body "🚨 CI 连续 $fixes 次自动修复仍失败,需你介入。" 2>/dev/null || true
     record_fail; exit 0
   fi
@@ -138,7 +145,7 @@ for cipr in $(gh pr list --repo "$REPO_GH" --state open --json number --jq '.[].
   git add -A >>"$AUDIT_LOG" 2>&1 || true
   if git diff --cached --quiet; then
     audit "  ⚠️ codex 未产生修复改动 → ESCALATE needs-human"
-    gh pr edit "$cipr" --repo "$REPO_GH" --remove-label "claude:review" --add-label "needs-human" 2>/dev/null || true
+    gh_rm_label "$REPO_GH" "$cipr" "claude:review"; gh_add_label "$REPO_GH" "$cipr" "needs-human"
     record_fail; exit 0
   fi
   git commit -m "fix: CI repair attempt $((fixes+1)) for ${ATELIER_REPO}#? (PR #${cipr})" >>"$AUDIT_LOG" 2>&1 || true
@@ -189,7 +196,7 @@ if [[ -n "$pr_num" ]]; then
         audit "  🎉 PR #$pr_num 已合并到 main"; record_ok
       else
         audit "  ❌ 自动合并失败(冲突/未过 CI)→ needs-human"
-        gh pr edit "$pr_num" --repo "$REPO_GH" --add-label "needs-human" 2>/dev/null || true
+        gh_add_label "$REPO_GH" "$pr_num" "needs-human"
         record_fail
       fi
     else
@@ -199,16 +206,16 @@ if [[ -n "$pr_num" ]]; then
     audit "  🔁 Claude 要求修改 → 关联 Issue 重打 codex:go"
     iss=$(gh pr view "$pr_num" --repo "$REPO_GH" --json body --jq '.body' 2>/dev/null | grep -oE "atelier#[0-9]+" | head -1 | grep -oE "[0-9]+" || true)
     [[ -n "$iss" ]] && gh issue edit "$iss" --repo "$ATELIER_REPO" --add-label "codex:go" 2>/dev/null || true
-    gh pr edit "$pr_num" --repo "$REPO_GH" --remove-label "claude:review" 2>/dev/null || true
+    gh_rm_label "$REPO_GH" "$pr_num" "claude:review"
     record_ok
   elif grep -q "VERDICT=ESCALATE" <<<"$verdict"; then
     audit "  🚨 Claude 主动 ESCALATE(高危/不可逆/涉真钱)→ needs-human + 通知"
-    gh pr edit "$pr_num" --repo "$REPO_GH" --remove-label "claude:review" --add-label "needs-human" 2>/dev/null || true
+    gh_rm_label "$REPO_GH" "$pr_num" "claude:review"; gh_add_label "$REPO_GH" "$pr_num" "needs-human"
     gh pr comment "$pr_num" --repo "$REPO_GH" --body "🚨 Claude 主动上报:此 PR 涉及不可逆/真钱/高危,需你最终拍板(回复 approve 即合并,或说明顾虑)。" 2>/dev/null || true
     record_ok   # ESCALATE 是正常决策,不计失败
   else
     audit "  ⚠️ 评审无明确 VERDICT → needs-human"
-    gh pr edit "$pr_num" --repo "$REPO_GH" --add-label "needs-human" 2>/dev/null || true
+    gh_add_label "$REPO_GH" "$pr_num" "needs-human"
     record_fail
   fi
   exit 0
