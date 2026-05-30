@@ -103,6 +103,7 @@ case "$args" in
   "pr checks 7"*) echo "unit pass" ;;
   "pr view 7"*"--json headRefName"*) echo "feature/existing-pr" ;;
   "pr view 7"*"--json reviews"*) echo "please fix review feedback" ;;
+  "api repos/"*"--method DELETE"*) exit 0 ;;
   "api repos/"*) cat >> "$TMP_ATELIER/gh.log"; exit 0 ;;
   "pr comment 7"*) exit 0 ;;
   *) echo "" ;;
@@ -138,6 +139,7 @@ case "$args" in
   "issue list"*"codex:go"*) echo "5" ;;
   "issue view 5"*"--json body"*) printf 'project: %s\n\nDo the thing.\n' "$TEST_PROJECT" ;;
   "issue view 5"*"--json title"*) echo "Implement gate" ;;
+  "api repos/"*"--method DELETE"*) exit 0 ;;
   "api repos/"*) cat >> "$TMP_ATELIER/gh.log"; exit 0 ;;
   "issue comment 5"*) exit 0 ;;
   "pr create"*) echo "https://github.com/StevenG3/app/pull/99" ;;
