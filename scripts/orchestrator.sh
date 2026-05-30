@@ -50,10 +50,12 @@ AUTO_CODEX_GO=$(yget "auto_codex_go")
 MAX_PHASES_DAY=$(yget "max_phases_per_day"); MAX_PHASES_DAY=${MAX_PHASES_DAY:-3}
 MAX_FAILS=$(yget "max_consecutive_failures"); MAX_FAILS=${MAX_FAILS:-2}
 MAX_CI_FIXES=$(yget "max_ci_fixes_per_pr"); MAX_CI_FIXES=${MAX_CI_FIXES:-3}
+MAX_REVIEW_ITERS=$(yget "max_review_iterations"); MAX_REVIEW_ITERS=${MAX_REVIEW_ITERS:-3}
 KILL_FILE=$(yget "kill_switch_file"); KILL_FILE=${KILL_FILE:-.atelier-stop}
 REPO_PATH=$(yget_repo "local_path")
 REPO_GH=$(yget_repo "github")
 TEST_CMD=$(yget "test_command")
+LINT_CMD=$(yget "lint_command")
 CURRENT_PHASE=$(yget "current_phase")
 
 # 重点审查清单(autonomy.review_focus 列表项)— 注入 Claude 评审 prompt
@@ -203,10 +205,60 @@ if [[ -n "$pr_num" ]]; then
       audit "  ✅ approve(auto_merge 关闭)→ 等人类合并"
     fi
   elif grep -q "VERDICT=CHANGES" <<<"$verdict"; then
-    audit "  🔁 Claude 要求修改 → 关联 Issue 重打 codex:go"
-    iss=$(gh pr view "$pr_num" --repo "$REPO_GH" --json body --jq '.body' 2>/dev/null | grep -oE "atelier#[0-9]+" | head -1 | grep -oE "[0-9]+" || true)
-    [[ -n "$iss" ]] && gh issue edit "$iss" --repo "$ATELIER_REPO" --add-label "codex:go" 2>/dev/null || true
-    gh_rm_label "$REPO_GH" "$pr_num" "claude:review"
+    REVIEW_ITER_FILE="$STATE_DIR/review_iters_${pr_num}"
+    review_iters=$(cat "$REVIEW_ITER_FILE" 2>/dev/null || echo 0)
+    if (( review_iters >= MAX_REVIEW_ITERS )); then
+      audit "  🚨 PR #$pr_num review 修改已迭代 $review_iters 次(上限 $MAX_REVIEW_ITERS)→ ESCALATE needs-human"
+      gh_rm_label "$REPO_GH" "$pr_num" "claude:review"; gh_add_label "$REPO_GH" "$pr_num" "needs-human"
+      gh pr comment "$pr_num" --repo "$REPO_GH" --body "🚨 Claude request-changes 自动迭代已达 $review_iters 次上限,需你介入。" 2>/dev/null || true
+      record_fail
+      exit 0
+    fi
+
+    audit "  🔁 Claude 要求修改 → 在原 PR 分支第 $((review_iters+1)) 次迭代"
+    pr_branch=$(gh pr view "$pr_num" --repo "$REPO_GH" --json headRefName --jq '.headRefName' 2>/dev/null)
+    review_note=$(gh pr view "$pr_num" --repo "$REPO_GH" --json reviews \
+      --jq '[.reviews[] | select(.state=="CHANGES_REQUESTED" or .state=="REQUEST_CHANGES") | .body] | map(select(. != null and . != "")) | last // ""' 2>/dev/null || true)
+    [[ -n "$review_note" ]] || review_note="Claude 已对 PR #${pr_num} request changes。请用 gh pr view ${pr_num} --repo ${REPO_GH} --comments 和 gh pr diff ${pr_num} --repo ${REPO_GH} 查看评审意见与 diff 后修复。"
+
+    cd "$REPO_PATH"
+    git fetch origin >>"$AUDIT_LOG" 2>&1 || true
+    git checkout "$pr_branch" >>"$AUDIT_LOG" 2>&1 && git pull --ff-only >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ checkout $pr_branch 失败"; record_fail; exit 1; }
+    git reset --hard HEAD >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ reset PR 分支失败"; record_fail; exit 1; }
+    git clean -fd >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ clean PR 分支失败"; record_fail; exit 1; }
+
+    printf '%s' "PR #${pr_num} 收到 Claude request-changes。请在当前已 checkout 的原 PR 分支 \`${pr_branch}\` 上按以下评审意见修改,不要新建分支、不要创建新 PR、不要 git commit/push(外层处理)。实现后请自行运行本仓库 lint/test 门禁并修到通过。
+
+评审意见:
+${review_note}
+
+本地门禁:
+- lint: ${LINT_CMD:-<未配置>}
+- test: ${TEST_CMD:-<未配置>}" \
+      | codex exec -s workspace-write -C "$REPO_PATH" --skip-git-repo-check \
+          -o "$STATE_DIR/review-fix-${pr_num}-last.md" >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ codex review 修改异常"; record_fail; exit 1; }
+
+    if [[ -n "$LINT_CMD" ]]; then
+      audit "  运行 lint:$LINT_CMD"
+      eval "$LINT_CMD" >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ review 修改后 lint 失败"; gh_rm_label "$REPO_GH" "$pr_num" "claude:review"; gh_add_label "$REPO_GH" "$pr_num" "needs-human"; record_fail; exit 0; }
+    fi
+    if [[ -n "$TEST_CMD" ]]; then
+      audit "  运行测试:$TEST_CMD"
+      eval "$TEST_CMD" >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ review 修改后测试失败"; gh_rm_label "$REPO_GH" "$pr_num" "claude:review"; gh_add_label "$REPO_GH" "$pr_num" "needs-human"; record_fail; exit 0; }
+    fi
+
+    git add -A >>"$AUDIT_LOG" 2>&1 || true
+    if git diff --cached --quiet; then
+      audit "  ⚠️ codex 未产生 review 修改改动 → ESCALATE needs-human"
+      gh_rm_label "$REPO_GH" "$pr_num" "claude:review"; gh_add_label "$REPO_GH" "$pr_num" "needs-human"
+      record_fail; exit 0
+    fi
+    git commit -m "fix: address review feedback for PR #${pr_num}" >>"$AUDIT_LOG" 2>&1 || true
+    git push >>"$AUDIT_LOG" 2>&1 || { audit "  ❌ push review 修改失败"; record_fail; exit 1; }
+    echo $(( review_iters + 1 )) > "$REVIEW_ITER_FILE"
+    gh_add_label "$REPO_GH" "$pr_num" "claude:review"
+    gh_rm_label "$REPO_GH" "$pr_num" "needs-human"; gh_rm_label "$REPO_GH" "$pr_num" "needs-response"
+    audit "  ✓ 已推送到原 PR 分支 $pr_branch,等待下一 tick 复审"
     record_ok
   elif grep -q "VERDICT=ESCALATE" <<<"$verdict"; then
     audit "  🚨 Claude 主动 ESCALATE(高危/不可逆/涉真钱)→ needs-human + 通知"
@@ -230,7 +282,7 @@ if [[ -n "$resp_iss" ]]; then
   audit "② 回答 Issue #$resp_iss 的 codex 提问"
   run_claude "你是 Atelier 架构师。读 Issue ${ATELIER_REPO}#${resp_iss} 全部评论(gh issue view --comments),
 用决策格式回复 codex 最新的 @claude 提问(gh issue comment):**决策:** / **理由:** / **行动:** 继续|等人类|停止。
-若决策导致规格变更,gh issue edit 更新 body。完成后 gh issue edit 移除 needs-response 标签。" >>"$AUDIT_LOG" 2>&1 \
+若决策导致规格变更,gh issue edit 更新 body。完成后用 REST 删除 needs-response 标签:gh api repos/${ATELIER_REPO}/issues/${resp_iss}/labels/needs-response --method DELETE。" >>"$AUDIT_LOG" 2>&1 \
     && { audit "  ✓ 已回复"; record_ok; } || { audit "  ❌ 回复失败"; record_fail; }
   exit 0
 fi
@@ -288,6 +340,7 @@ plan_out=$(run_claude "你是 Atelier 架构师(StevenG3/atelier CLAUDE.md)。�
 if grep -q "PLANNED=Phase${NEXT}" <<<"$plan_out"; then
   # 更新 current_phase + 计数
   sed -i "s/^current_phase:.*/current_phase: $NEXT/" "$CFG"
+  (cd "$REPO_ROOT" && git add "projects/$PROJECT.yml" && git commit -m "chore: bump current_phase → $NEXT" && git push) >>"$AUDIT_LOG" 2>&1 || true
   echo $(( phases_today + 1 )) > "$DAY_FILE"
   audit "  ✓ Phase $NEXT 已发布并打 codex:go;current_phase → $NEXT(今日第 $((phases_today+1)) 个)"
   record_ok

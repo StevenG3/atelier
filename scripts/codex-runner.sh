@@ -43,6 +43,10 @@ fi
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
+# PR/Issue 标签操作统一走 REST,避免 gh issue/pr edit 的 GraphQL 兼容问题。
+gh_add_label()  { echo "{\"labels\":[\"$3\"]}" | gh api "repos/$1/issues/$2/labels" --method POST --input - --silent 2>/dev/null || true; }
+gh_rm_label()   { local enc; enc=$(printf '%s' "$3" | sed 's/:/%3A/g'); gh api "repos/$1/issues/$2/labels/$enc" --method DELETE --silent 2>/dev/null || true; }
+
 # ── YAML 取值(简易,projects/<name>.yml)──────────────────────────────
 # 取第一个 repo 的 local_path / github
 yaml_first_repo_field() {
@@ -54,7 +58,7 @@ yaml_first_repo_field() {
 }
 yaml_scalar() {
   local file="$1" key="$2"
-  grep -m1 "^${key}:" "$file" 2>/dev/null | sed "s/^${key}:[[:space:]]*//; s/\"//g; s/^'//; s/'$//"
+  grep -m1 "^${key}:" "$file" 2>/dev/null | sed "s/^${key}:[[:space:]]*//; s/[[:space:]]*#.*//; s/[[:space:]]*$//; s/\"//g; s/^'//; s/'$//"
 }
 
 # ── 1. 找一个 codex:go 且无 codex:working 的 Issue ──────────────────────
@@ -76,7 +80,8 @@ project=$(printf '%s\n' "$body" | grep -m1 -i '^project:' | sed 's/^[Pp]roject:[
 
 if [[ -z "$project" || ! -f "$PROJECTS_DIR/$project.yml" ]]; then
   log "Issue #$issue_num 缺少有效 project 字段(got: '$project')→ needs-human"
-  gh issue edit "$issue_num" --repo "$ATELIER_REPO" --add-label "needs-human" 2>/dev/null || true
+  gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:go"
+  gh_add_label "$ATELIER_REPO" "$issue_num" "needs-human"
   gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
     --body "⚠️ codex-runner 无法处理:Issue body 第一行需要 \`project: <name>\`,且 projects/<name>.yml 必须存在。当前解析到:\`$project\`" 2>/dev/null || true
   exit 1
@@ -86,27 +91,29 @@ cfg="$PROJECTS_DIR/$project.yml"
 repo_path=$(yaml_first_repo_field "$cfg" "local_path")
 repo_github=$(yaml_first_repo_field "$cfg" "github")
 test_cmd=$(yaml_scalar "$cfg" "test_command")
+lint_cmd=$(yaml_scalar "$cfg" "lint_command")
 
 log "project=$project repo_path=$repo_path github=$repo_github"
 
 if [[ -z "$repo_path" || ! -d "$repo_path" ]]; then
   log "repo 路径无效:$repo_path → needs-human"
-  gh issue edit "$issue_num" --repo "$ATELIER_REPO" --add-label "needs-human" 2>/dev/null || true
+  gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:go"
+  gh_add_label "$ATELIER_REPO" "$issue_num" "needs-human"
   gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
     --body "⚠️ codex-runner:projects/$project.yml 的首个 repo local_path 无效(\`$repo_path\`)。" 2>/dev/null || true
   exit 1
 fi
 
 # ── 3. 状态机:codex:go → codex:working(防重入)─────────────────────────
-gh issue edit "$issue_num" --repo "$ATELIER_REPO" \
-  --remove-label "codex:go" --add-label "codex:working" 2>/dev/null || true
+gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:go"
+gh_add_label "$ATELIER_REPO" "$issue_num" "codex:working"
 log "标签 codex:go → codex:working"
 
 # 失败兜底:任何提前退出都回滚为 needs-human
 fail() {
   log "FAILED: $*"
-  gh issue edit "$issue_num" --repo "$ATELIER_REPO" \
-    --remove-label "codex:working" --add-label "needs-human" 2>/dev/null || true
+  gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:working"
+  gh_add_label "$ATELIER_REPO" "$issue_num" "needs-human"
   gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
     --body "❌ codex-runner 失败:$1。日志:\`$RUN_LOG\`" 2>/dev/null || true
   exit 1
@@ -116,17 +123,22 @@ fail() {
 cd "$repo_path"
 git fetch origin >>"$RUN_LOG" 2>&1 || true
 default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || echo main)
+git reset --hard HEAD >>"$RUN_LOG" 2>&1 || fail "清理预存改动(reset)失败"
+git clean -fd >>"$RUN_LOG" 2>&1 || fail "清理预存改动(clean)失败"
 git checkout "$default_branch" >>"$RUN_LOG" 2>&1 || fail "checkout $default_branch 失败"
 git pull --ff-only >>"$RUN_LOG" 2>&1 || fail "pull 失败"
 branch="feat/atelier-${issue_num}-$(date -u +%Y%m%d%H%M%S)"
 git checkout -b "$branch" >>"$RUN_LOG" 2>&1 || fail "建分支失败"
+git reset --hard HEAD >>"$RUN_LOG" 2>&1 || fail "清理工作区(reset)失败"
+git clean -fd >>"$RUN_LOG" 2>&1 || fail "清理工作区(clean)失败"
 log "分支:$branch (base $default_branch)"
 
 # ── 5. 跑 codex exec 实现(非交互,workspace-write 沙箱)───────────────────
 log "启动 codex exec(可能耗时数分钟)…"
 CODEX_PROMPT="你是执行工程师 Codex。下面 <stdin> 是一个 GitHub Issue 的完整规格。
 请在当前仓库实现它,严格遵守规格中的 ALLOWED FILES、FORBIDDEN SCOPE、SAFETY INVARIANTS、ACCEPTANCE CRITERIA。
-补充并跑通测试。遇到规格里的 STOP-AND-ASK 条件时,在代码注释里标注 TODO(STOP-AND-ASK) 并实现最合理的默认方案,不要中断。
+补充并跑通测试。实现完成后必须自行运行 lint 门禁 \`${lint_cmd:-ruff check .}\` 和测试门禁 \`${test_cmd:-<按 Issue 要求>}\`,修掉所有 lint/test 问题后再交回。
+遇到规格里的 STOP-AND-ASK 条件时,在代码注释里标注 TODO(STOP-AND-ASK) 并实现最合理的默认方案,不要中断。
 不要执行 git commit / git push / 创建 PR —— 这些由外层脚本完成。只修改工作区文件。"
 
 if printf '%s' "$body" | codex exec \
@@ -146,8 +158,17 @@ if git diff --cached --quiet; then
   fail "codex 未产生任何文件改动"
 fi
 
-# ── 7. 跑测试(失败则开 draft PR + needs-human,不直接合并路径)──────────
+# ── 7. 跑本地门禁(失败则开 draft PR + needs-human,不直接合并路径)──────
 test_passed=1
+if [[ -n "$lint_cmd" ]]; then
+  log "运行 lint:$lint_cmd"
+  if eval "$lint_cmd" >>"$RUN_LOG" 2>&1; then
+    log "lint 通过"
+  else
+    test_passed=0
+    log "lint 失败"
+  fi
+fi
 if [[ -n "$test_cmd" ]]; then
   log "运行测试:$test_cmd"
   if eval "$test_cmd" >>"$RUN_LOG" 2>&1; then
@@ -188,15 +209,15 @@ log "PR: $pr_url"
 
 # ── 10. 收尾:状态机 codex:working → 完成,Issue 评论 PR ────────────────
 if [[ "$test_passed" -eq 1 ]]; then
-  gh issue edit "$issue_num" --repo "$ATELIER_REPO" --remove-label "codex:working" 2>/dev/null || true
+  gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:working"
 else
-  gh issue edit "$issue_num" --repo "$ATELIER_REPO" \
-    --remove-label "codex:working" --add-label "needs-human" 2>/dev/null || true
+  gh_rm_label "$ATELIER_REPO" "$issue_num" "codex:working"
+  gh_add_label "$ATELIER_REPO" "$issue_num" "needs-human"
 fi
 
 # gh 2.4.0 的 gh pr edit --label 走 GraphQL 会失败,用 REST(PR 共用 issues/{n}/labels)
 pr_number=$(printf '%s' "$pr_url" | grep -oE '[0-9]+$')
-echo "{\"labels\":[\"$review_label\"]}" | gh api "repos/$repo_github/issues/$pr_number/labels" --method POST --input - --silent 2>/dev/null || true
+gh_add_label "$repo_github" "$pr_number" "$review_label"
 gh issue comment "$issue_num" --repo "$ATELIER_REPO" \
   --body "$(printf '🤖 codex-runner 完成实现。\n- 分支:\`%s\`\n- PR:%s\n- %s' "$branch" "$pr_url" "$status_note")" 2>/dev/null || true
 
