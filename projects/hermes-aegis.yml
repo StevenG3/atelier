@@ -34,7 +34,7 @@ repos:
 # Claude 生成的规格保存至此，同时作为 Atelier Issue body
 phases_prompt_dir: "/home/gggqqy/docs"
 phases_prompt_pattern: "CODEX_PHASE{n}_PROMPT.md"
-current_phase: 23
+current_phase: 24
 
 # 在 GitHub Project 看板「工程」字段的值，用于筛选
 project_tag: "hermes-aegis"

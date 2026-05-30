@@ -97,6 +97,40 @@ phases_today=$(cat "$DAY_FILE" 2>/dev/null || echo 0)
 record_fail() { echo $(( $(cat "$FAIL_FILE" 2>/dev/null || echo 0) + 1 )) > "$FAIL_FILE"; }
 record_ok()   { echo 0 > "$FAIL_FILE"; }
 
+require_github_api() {
+  local repo
+  for repo in "$ATELIER_REPO" "$REPO_GH"; do
+    if ! gh api "repos/$repo" --silent >/dev/null 2>&1; then
+      audit "FATAL: GitHub API 不可用或 $repo 不可访问,本 tick 停止以避免误判空闲状态。"
+      record_fail
+      exit 1
+    fi
+  done
+}
+
+require_github_api
+
+bump_current_phase() {
+  local phase="$1"
+  [[ "$phase" =~ ^[0-9]+$ ]] || return 1
+  [[ "$CURRENT_PHASE" =~ ^[0-9]+$ ]] || CURRENT_PHASE=0
+  (( phase > CURRENT_PHASE )) || return 0
+
+  sed -i "s/^current_phase:.*/current_phase: $phase/" "$CFG"
+  (cd "$REPO_ROOT" && git add "projects/$PROJECT.yml" && git commit -m "chore: bump current_phase → $phase" && git push) >>"$AUDIT_LOG" 2>&1 || return 1
+  CURRENT_PHASE="$phase"
+}
+
+phase_for_pr() {
+  local pr="$1" meta issue body
+  meta=$(gh pr view "$pr" --repo "$REPO_GH" --json body,title --jq '[.body // "", .title // ""] | join("\n")' 2>/dev/null || true)
+  issue=$(grep -oE '(StevenG3/atelier|atelier)#[0-9]+' <<<"$meta" | sed -E 's/.*#([0-9]+)$/\1/' | head -1 || true)
+  [[ -n "$issue" ]] || return 1
+
+  body=$(gh issue view "$issue" --repo "$ATELIER_REPO" --json body --jq '.body // ""' 2>/dev/null || true)
+  awk -F: 'tolower($1)=="phase" {gsub(/[[:space:]\r]/, "", $2); print $2; exit}' <<<"$body"
+}
+
 # claude -p 封装(headless,允许 Bash 跑 gh/git)
 run_claude() {
   local prompt="$1"
@@ -196,6 +230,16 @@ if [[ -n "$pr_num" ]]; then
       audit "  ✅ Claude approve → 自动合并 PR #$pr_num"
       if gh pr merge "$pr_num" --repo "$REPO_GH" --squash --delete-branch 2>>"$AUDIT_LOG"; then
         audit "  🎉 PR #$pr_num 已合并到 main"; record_ok
+        merged_phase=$(phase_for_pr "$pr_num" || true)
+        if [[ -n "$merged_phase" ]]; then
+          if bump_current_phase "$merged_phase"; then
+            audit "  ✓ current_phase → $CURRENT_PHASE(来自 PR #$pr_num)"
+          else
+            audit "  ⚠️ 无法从 PR #$pr_num 更新 current_phase(phase=$merged_phase)"
+          fi
+        else
+          audit "  ⚠️ 未能从 PR #$pr_num 解析 Phase,跳过 current_phase bump"
+        fi
       else
         audit "  ❌ 自动合并失败(冲突/未过 CI)→ needs-human"
         gh_add_label "$REPO_GH" "$pr_num" "needs-human"
@@ -339,11 +383,14 @@ plan_out=$(run_claude "你是 Atelier 架构师(StevenG3/atelier CLAUDE.md)。�
 
 if grep -q "PLANNED=Phase${NEXT}" <<<"$plan_out"; then
   # 更新 current_phase + 计数
-  sed -i "s/^current_phase:.*/current_phase: $NEXT/" "$CFG"
-  (cd "$REPO_ROOT" && git add "projects/$PROJECT.yml" && git commit -m "chore: bump current_phase → $NEXT" && git push) >>"$AUDIT_LOG" 2>&1 || true
-  echo $(( phases_today + 1 )) > "$DAY_FILE"
-  audit "  ✓ Phase $NEXT 已发布并打 codex:go;current_phase → $NEXT(今日第 $((phases_today+1)) 个)"
-  record_ok
+  if bump_current_phase "$NEXT"; then
+    echo $(( phases_today + 1 )) > "$DAY_FILE"
+    audit "  ✓ Phase $NEXT 已发布并打 codex:go;current_phase → $NEXT(今日第 $((phases_today+1)) 个)"
+    record_ok
+  else
+    audit "  ❌ Phase $NEXT 已规划但 current_phase 提交/推送失败"
+    record_fail
+  fi
 else
   audit "  ❌ Phase $NEXT 规划失败(无 PLANNED 标记)"
   record_fail

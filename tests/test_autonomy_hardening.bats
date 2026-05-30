@@ -63,6 +63,18 @@ SH
   chmod +x "$MOCK_BIN/git"
 }
 
+write_mock_git_commit_fails() {
+  cat > "$MOCK_BIN/git" <<'SH'
+#!/usr/bin/env bash
+echo "git $*" >> "$TMP_ATELIER/git.log"
+case "$*" in
+  "commit -m "*) exit 1 ;;
+esac
+exit 0
+SH
+  chmod +x "$MOCK_BIN/git"
+}
+
 write_mock_codex() {
   cat > "$MOCK_BIN/codex" <<'SH'
 #!/usr/bin/env bash
@@ -92,6 +104,16 @@ SH
   chmod +x "$MOCK_BIN/claude"
 }
 
+write_mock_claude_approve() {
+  cat > "$MOCK_BIN/claude" <<'SH'
+#!/usr/bin/env bash
+echo "claude $*" >> "$TMP_ATELIER/claude.log"
+echo "reviewed"
+echo "VERDICT=APPROVE"
+SH
+  chmod +x "$MOCK_BIN/claude"
+}
+
 write_mock_gh_changes() {
   cat > "$MOCK_BIN/gh" <<'SH'
 #!/usr/bin/env bash
@@ -112,18 +134,51 @@ SH
   chmod +x "$MOCK_BIN/gh"
 }
 
+write_mock_gh_approve() {
+  cat > "$MOCK_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$TMP_ATELIER/gh.log"
+args="$*"
+case "$args" in
+  "api repos/"*) exit 0 ;;
+  "pr list"*"--json number --jq .[].number"*) echo "" ;;
+  "pr list"*"--label claude:review"*) echo "7" ;;
+  "pr checks 7"*) echo "unit pass" ;;
+  "pr merge 7"*) exit 0 ;;
+  "pr view 7"*"--json body,title"*) printf 'Auto-implemented from StevenG3/atelier#5.\nfeat: thing (atelier#5)\n' ;;
+  "issue view 5"*"--json body"*) printf 'project: %s\nphase: 24\n' "$TEST_PROJECT" ;;
+  *) echo "" ;;
+esac
+SH
+  chmod +x "$MOCK_BIN/gh"
+}
+
 write_mock_gh_idle() {
   cat > "$MOCK_BIN/gh" <<'SH'
 #!/usr/bin/env bash
 echo "gh $*" >> "$TMP_ATELIER/gh.log"
 args="$*"
 case "$args" in
+  "api repos/"*) exit 0 ;;
   "pr list"*"--json number --jq .[].number"*) echo "" ;;
   "pr list"*"--label claude:review"*) echo "" ;;
   "issue list"*"needs-response"*) echo "" ;;
   "issue list"*"codex:go"*) echo "" ;;
   "issue list"*"--json labels"*) echo "0" ;;
   "pr list"*"--json number --jq length"*) echo "0" ;;
+  *) echo "" ;;
+esac
+SH
+  chmod +x "$MOCK_BIN/gh"
+}
+
+write_mock_gh_api_down() {
+  cat > "$MOCK_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+echo "gh $*" >> "$TMP_ATELIER/gh.log"
+args="$*"
+case "$args" in
+  "api repos/"*) exit 1 ;;
   *) echo "" ;;
 esac
 SH
@@ -168,6 +223,23 @@ SH
   [ "$(cat "$STATE_DIR/review_iters_7")" = "1" ]
 }
 
+@test "APPROVE merge bumps current_phase from linked atelier issue" {
+  write_project "autonomy-approve" 23
+  write_mock_git
+  write_mock_codex
+  write_mock_claude_approve
+  write_mock_gh_approve
+
+  run bash "$ORCH" "$TEST_PROJECT"
+  [ "$status" -eq 0 ]
+
+  grep -q "pr merge 7" "$TMP_ATELIER/gh.log"
+  grep -q "current_phase: 24" "$REPO_ROOT/projects/$TEST_PROJECT.yml"
+  grep -q "git add projects/$TEST_PROJECT.yml" "$TMP_ATELIER/git.log"
+  grep -q "git commit -m chore: bump current_phase → 24" "$TMP_ATELIER/git.log"
+  grep -q "current_phase → 24(来自 PR #7)" "$STATE_DIR/audit.log"
+}
+
 @test "CHANGES escalates after max_review_iterations" {
   write_project "autonomy-review-limit"
   write_mock_git
@@ -197,6 +269,37 @@ SH
   grep -q "git add projects/$TEST_PROJECT.yml" "$TMP_ATELIER/git.log"
   grep -q "git commit -m chore: bump current_phase → 24" "$TMP_ATELIER/git.log"
   grep -q "git push" "$TMP_ATELIER/git.log"
+}
+
+@test "planning records failure when current_phase bump cannot commit" {
+  write_project "autonomy-planning-commit-fail" 23
+  write_mock_git_commit_fails
+  write_mock_codex
+  write_mock_claude_planned
+  write_mock_gh_idle
+
+  run bash "$ORCH" "$TEST_PROJECT"
+  [ "$status" -eq 0 ]
+
+  grep -q "current_phase: 24" "$REPO_ROOT/projects/$TEST_PROJECT.yml"
+  grep -q "current_phase 提交/推送失败" "$STATE_DIR/audit.log"
+  [ "$(cat "$STATE_DIR/consecutive_failures")" = "1" ]
+}
+
+@test "GitHub API failure stops before idle planning" {
+  write_project "autonomy-gh-down" 23
+  write_mock_git
+  write_mock_codex
+  write_mock_claude_planned
+  write_mock_gh_api_down
+
+  run bash "$ORCH" "$TEST_PROJECT"
+  [ "$status" -eq 1 ]
+
+  grep -q "GitHub API 不可用" "$STATE_DIR/audit.log"
+  grep -q "current_phase: 23" "$REPO_ROOT/projects/$TEST_PROJECT.yml"
+  [ ! -f "$TMP_ATELIER/claude.log" ]
+  [ "$(cat "$STATE_DIR/consecutive_failures")" = "1" ]
 }
 
 @test "codex-runner cleans branch, prompts for lint, and gates draft PR on lint failure" {
